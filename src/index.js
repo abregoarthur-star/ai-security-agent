@@ -16,8 +16,8 @@ app.get('/health', (_req, res) => {
     uptime: process.uptime(),
     tools: ['audit_mcp_server', 'diff_mcp_server', 'firewall_recent_events'],
     env: {
-      API_KEY_set: !!process.env.API_KEY,
-      API_KEY_len: (process.env.API_KEY || '').length,
+      AGENT_API_KEY_set: !!(process.env.AGENT_API_KEY || process.env.API_KEY),
+      AGENT_API_KEY_len: (process.env.AGENT_API_KEY || process.env.API_KEY || '').length,
       BRAIN_API_URL_set: !!process.env.BRAIN_API_URL,
       BRAIN_API_KEY_set: !!process.env.BRAIN_API_KEY,
     },
@@ -26,7 +26,7 @@ app.get('/health', (_req, res) => {
 
 // ─── Auth (shared key with Brain/Security Agent) ─────────────
 function requireApiKey(req, res, next) {
-  const expected = process.env.API_KEY;
+  const expected = process.env.AGENT_API_KEY || process.env.API_KEY;
   if (!expected) return next();
   const got = req.header('x-api-key');
   if (got !== expected) return res.status(401).json({ error: 'unauthorized' });
