@@ -2,6 +2,7 @@ import express from 'express';
 import { auditMcpServer } from './tools/audit-mcp-server.js';
 import { diffMcpServer } from './tools/diff-mcp-server.js';
 import { firewallRecentEvents } from './tools/firewall-events.js';
+import { runSelfTest } from './tools/run-self-test.js';
 
 const PORT = process.env.PORT || 3100;
 const app = express();
@@ -14,7 +15,7 @@ app.get('/health', (_req, res) => {
     version: '0.1.0',
     status: 'ok',
     uptime: process.uptime(),
-    tools: ['audit_mcp_server', 'diff_mcp_server', 'firewall_recent_events'],
+    tools: ['audit_mcp_server', 'diff_mcp_server', 'firewall_recent_events', 'run_self_test'],
     env: {
       AGENT_API_KEY_set: !!(process.env.AGENT_API_KEY || process.env.API_KEY),
       AGENT_API_KEY_len: (process.env.AGENT_API_KEY || process.env.API_KEY || '').length,
@@ -56,6 +57,15 @@ app.post('/tools/firewall_recent_events', requireApiKey, async (req, res) => {
   try {
     const events = await firewallRecentEvents(req.body);
     res.json(events);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.post('/tools/run_self_test', requireApiKey, async (req, res) => {
+  try {
+    const result = await runSelfTest(req.body);
+    res.json(result);
   } catch (err) {
     res.status(400).json({ error: err.message });
   }

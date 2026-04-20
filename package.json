@@ -16,6 +16,7 @@
     "@dj_abstract/mcp-audit": "^0.4.0",
     "@dj_abstract/agent-firewall": "^0.1.0",
     "@dj_abstract/agent-capability-inventory": "^0.1.0",
+    "@dj_abstract/prompt-genesis": "^0.3.0",
     "express": "^4.21.0",
     "node-cron": "^3.0.3"
   },
