@@ -1,0 +1,24 @@
+{
+  "name": "ai-security-agent",
+  "version": "0.1.0",
+  "description": "Orchestration + MCP server for the AI-agent security portfolio (mcp-audit, prompt-eval, agent-firewall, prompt-genesis, agent-capability-inventory, mcp-audit-sweep).",
+  "type": "module",
+  "main": "src/index.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@dj_abstract/mcp-audit": "^0.4.0",
+    "@dj_abstract/agent-firewall": "^0.1.0",
+    "@dj_abstract/agent-capability-inventory": "^0.1.0",
+    "express": "^4.21.0",
+    "node-cron": "^3.0.3"
+  },
+  "author": "Arthur Abrego",
+  "license": "MIT"
+}
