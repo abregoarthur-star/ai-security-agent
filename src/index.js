@@ -15,6 +15,12 @@ app.get('/health', (_req, res) => {
     status: 'ok',
     uptime: process.uptime(),
     tools: ['audit_mcp_server', 'diff_mcp_server', 'firewall_recent_events'],
+    env: {
+      API_KEY_set: !!process.env.API_KEY,
+      API_KEY_len: (process.env.API_KEY || '').length,
+      BRAIN_API_URL_set: !!process.env.BRAIN_API_URL,
+      BRAIN_API_KEY_set: !!process.env.BRAIN_API_KEY,
+    },
   });
 });
 
