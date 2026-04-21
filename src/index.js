@@ -3,6 +3,7 @@ import { auditMcpServer } from './tools/audit-mcp-server.js';
 import { diffMcpServer } from './tools/diff-mcp-server.js';
 import { firewallRecentEvents } from './tools/firewall-events.js';
 import { runSelfTest } from './tools/run-self-test.js';
+import { startSchedule, getLastScan, runSelfScan } from './cron.js';
 
 const PORT = process.env.PORT || 3100;
 const app = express();
@@ -73,16 +74,25 @@ app.post('/tools/run_self_test', requireApiKey, async (req, res) => {
 
 // ─── Aggregated posture (for dashboards) ─────────────────────
 app.get('/ai-security/posture', requireApiKey, async (_req, res) => {
+  const scan = getLastScan();
   res.json({
     service: 'ai-security-agent',
     asOf: new Date().toISOString(),
-    surfaces: {
-      // Populated by the scheduler once crons run; empty on first boot.
-      tracked: [],
-      findings: [],
-    },
-    note: 'Phase 1 scaffold. Cron-driven scan results land here in Phase 2.',
+    ...scan,
   });
+});
+
+app.get('/ai-security/last-scan', requireApiKey, async (_req, res) => {
+  res.json(getLastScan());
+});
+
+app.post('/ai-security/scan/trigger', requireApiKey, async (_req, res) => {
+  try {
+    const result = await runSelfScan({ trigger: 'manual' });
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ─── Global error handler ────────────────────────────────────
@@ -93,4 +103,5 @@ app.use((err, _req, res, _next) => {
 
 app.listen(PORT, () => {
   console.log(`[ai-sec-agent] listening on :${PORT}`);
+  startSchedule();
 });
