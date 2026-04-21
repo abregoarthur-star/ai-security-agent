@@ -18,10 +18,12 @@ app.get('/health', (_req, res) => {
     uptime: process.uptime(),
     tools: ['audit_mcp_server', 'diff_mcp_server', 'firewall_recent_events', 'run_self_test'],
     env: {
-      AGENT_API_KEY_set: !!(process.env.AGENT_API_KEY || process.env.API_KEY),
-      AGENT_API_KEY_len: (process.env.AGENT_API_KEY || process.env.API_KEY || '').length,
-      BRAIN_API_URL_set: !!process.env.BRAIN_API_URL,
-      BRAIN_API_KEY_set: !!process.env.BRAIN_API_KEY,
+      AGENT_API_KEY_set:  !!(process.env.AGENT_API_KEY || process.env.API_KEY),
+      AGENT_API_KEY_len:  (process.env.AGENT_API_KEY || process.env.API_KEY || '').length,
+      BRAIN_API_URL_set:  !!process.env.BRAIN_API_URL,
+      BRAIN_API_KEY_set:  !!process.env.BRAIN_API_KEY,
+      ANTHROPIC_API_KEY_set: !!process.env.ANTHROPIC_API_KEY,  // required for run_self_test judge
+      GROQ_API_KEY_set:   !!process.env.GROQ_API_KEY,          // required if generator/target uses Groq
     },
   });
 });
