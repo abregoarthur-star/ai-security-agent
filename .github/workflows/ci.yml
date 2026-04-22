@@ -1,0 +1,144 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  # Gate: secrets scan must pass before anything else runs.
+  # Mirrors Brain + Travel Optimizer CI patterns — every repo in the
+  # portfolio should fail fast on a committed credential.
+  secrets-gate:
+    name: Secrets Gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Run gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Parallel jobs — all require secrets-gate to pass
+  security-audit:
+    name: Security & Dependency Audit
+    needs: secrets-gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: npm audit (root)
+        run: npm audit --audit-level=high || echo "::warning::npm audit found vulnerabilities"
+
+  syntax-check:
+    name: Syntax Validation
+    needs: secrets-gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Check src syntax
+        run: |
+          echo "Checking source files..."
+          node --check src/index.js
+          node --check src/cron.js
+          for f in src/routes/*.js; do
+            echo "  ✓ $f"
+            node --check "$f"
+          done
+          for f in src/tools/*.js; do
+            echo "  ✓ $f"
+            node --check "$f"
+          done
+          echo "All source files passed syntax check"
+
+  smoke-test:
+    name: Post-Deploy Smoke Test
+    needs: [security-audit, syntax-check]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: Wait for Railway deploy
+        run: sleep 60
+
+      - name: Smoke test production endpoints
+        env:
+          BASE_URL: https://ai-security-agent-production.up.railway.app
+        run: |
+          PASS=0
+          FAIL=0
+
+          check() {
+            local name="$1"
+            local method="$2"
+            local url="$3"
+            local expected="$4"
+            local body="$5"
+
+            if [ "$method" = "POST" ]; then
+              status=$(curl -s -o /dev/null -w "%{http_code}" -X POST -H "Content-Type: application/json" -d "$body" "$url" --max-time 15)
+            else
+              status=$(curl -s -o /dev/null -w "%{http_code}" "$url" --max-time 15)
+            fi
+
+            if [ "$status" = "$expected" ]; then
+              echo "✅ $name → $status (expected $expected)"
+              PASS=$((PASS + 1))
+            else
+              echo "❌ $name → $status (expected $expected)"
+              FAIL=$((FAIL + 1))
+            fi
+          }
+
+          echo "═══ AI Security Agent Production Smoke Test ═══"
+          echo ""
+
+          # Health check — should always be 200 and list exposed tools
+          check "GET /health" GET "$BASE_URL/health" "200"
+
+          # Verify /health response includes all expected tools.
+          tools_json=$(curl -s "$BASE_URL/health" --max-time 15)
+          for tool in audit_mcp_server diff_mcp_server firewall_recent_events run_self_test capability_inventory sweep_mcp_ecosystem; do
+            if echo "$tools_json" | grep -q "\"$tool\""; then
+              echo "✅ /health advertises $tool"
+              PASS=$((PASS + 1))
+            else
+              echo "❌ /health missing $tool"
+              FAIL=$((FAIL + 1))
+            fi
+          done
+
+          # Public architecture page — should be 200 (no auth required)
+          check "GET /architecture" GET "$BASE_URL/architecture" "200"
+
+          # Tools endpoints without API key — should 401
+          check "POST /tools/audit_mcp_server (no auth)" POST "$BASE_URL/tools/audit_mcp_server" "401" '{}'
+
+          echo ""
+          echo "═══ Results: $PASS passed, $FAIL failed ═══"
+
+          if [ "$FAIL" -gt 0 ]; then
+            echo "::error::$FAIL smoke test(s) failed"
+            exit 1
+          fi
