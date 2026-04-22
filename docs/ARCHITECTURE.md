@@ -114,6 +114,38 @@ The baseline is rebuilt on every scan (last good scan becomes the new baseline) 
 | `GROQ_API_KEY` | Required if Groq | Required when `run_self_test` uses Groq as generator or target. |
 | `PORT` | Auto | Railway assigns; defaults to 3100 in dev. |
 
+## CI/CD + deployment automation
+
+Every push to `main` triggers two parallel workflows plus Railway's auto-deploy. CI matches the pattern shipped on Brain + Travel Optimizer — no repo in the fleet merges to main without a secrets gate.
+
+### `.github/workflows/secrets-scan.yml`
+Gitleaks scan. Runs on push, PR, and manual dispatch. Fails fast on a committed credential. Minimal form — no downstream dependencies. Mirrors Travel Optimizer's file exactly.
+
+### `.github/workflows/ci.yml`
+Four-stage pipeline:
+
+| Stage | Depends on | What it does |
+|---|---|---|
+| `secrets-gate` | — | Gitleaks scan; blocks everything downstream |
+| `security-audit` | `secrets-gate` | `npm audit --audit-level=high` on root deps |
+| `syntax-check` | `secrets-gate` | `node --check` on `src/index.js`, `src/cron.js`, `src/routes/*.js`, `src/tools/*.js` |
+| `smoke-test` | `security-audit`, `syntax-check` | Post-deploy verification against Railway production (see below). Only runs on push to `main`. |
+
+### Post-deploy smoke test
+
+After a 60-second Railway deploy wait, the `smoke-test` job verifies:
+
+- `GET /health` returns 200
+- `/health` response lists all 6 expected tools (`audit_mcp_server`, `diff_mcp_server`, `firewall_recent_events`, `run_self_test`, `capability_inventory`, `sweep_mcp_ecosystem`)
+- `GET /architecture` returns 200 (public, no auth)
+- `POST /tools/audit_mcp_server` without `x-api-key` returns 401 (auth-wall intact)
+
+Any failure emits `::error::` and fails the pipeline. Missing a tool in `/health` indicates a registration regression; a 401-becomes-200 would indicate an auth middleware regression.
+
+### Deploy mechanism
+
+Railway auto-deploys on push to `main` via `railway.toml` + `Dockerfile`. No manual trigger needed. The CI `smoke-test` stage's 60s pre-check gives Railway time to finish rolling; if the CI smoke fails, the deploy is live but regressed — investigate Railway logs, not the CI runner.
+
 ## Relationship with individual portfolio repos
 
 Each portfolio repo remains independently maintained and published to npm / GitHub Marketplace. ai-security-agent is the **orchestration and runtime layer** — it doesn't replace the standalone tools.

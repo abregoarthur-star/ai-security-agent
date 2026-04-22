@@ -1086,11 +1086,71 @@ p code, li code, td code {
 </div>
 
 <!-- ════════════════════════════════════════════════════════
-     PART 6 — PORTFOLIO CROSS-REFERENCE
+     PART 6 — CI/CD + DEPLOYMENT AUTOMATION
      ════════════════════════════════════════════════════════ -->
 <hr class="divider-thick">
 <div class="section">
-  <div class="section-header">PART 6 &mdash; PORTFOLIO CROSS-REFERENCE</div>
+  <div class="section-header">PART 6 &mdash; CI/CD + DEPLOYMENT AUTOMATION</div>
+  <div class="section-sub">Every push to main runs gitleaks + npm audit + syntax check + post-deploy smoke &middot; matches Brain + Travel Optimizer fleet pattern &middot; no merge to main without secrets gate</div>
+
+  <div class="data-table-wrap" style="margin-top: 18px;">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th style="width:160px;">Stage</th>
+          <th style="width:140px;">Depends on</th>
+          <th>What it does</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td data-label="Stage"><code>secrets-gate</code></td>
+          <td data-label="Depends on"><span class="route">&mdash;</span></td>
+          <td data-label="What it does">Gitleaks scan; blocks everything downstream on a committed credential</td>
+        </tr>
+        <tr>
+          <td data-label="Stage"><code>security-audit</code></td>
+          <td data-label="Depends on"><code>secrets-gate</code></td>
+          <td data-label="What it does"><code>npm audit --audit-level=high</code> on root deps</td>
+        </tr>
+        <tr>
+          <td data-label="Stage"><code>syntax-check</code></td>
+          <td data-label="Depends on"><code>secrets-gate</code></td>
+          <td data-label="What it does"><code>node --check</code> on <code>src/index.js</code>, <code>src/cron.js</code>, <code>src/routes/*.js</code>, <code>src/tools/*.js</code></td>
+        </tr>
+        <tr>
+          <td data-label="Stage"><code>smoke-test</code></td>
+          <td data-label="Depends on"><code>security-audit</code> + <code>syntax-check</code></td>
+          <td data-label="What it does">Post-deploy verification against Railway production (60s deploy wait first). Only runs on push to <code>main</code>.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div style="margin-top: 18px; font-family: var(--font-body); font-size: 13px; color: var(--text-dim); line-height: 1.7;">
+    <strong style="color: var(--text);">Smoke test asserts:</strong>
+    <ul style="margin-top: 8px; margin-left: 20px; line-height: 1.8;">
+      <li><code>GET /health</code> returns 200</li>
+      <li><code>/health</code> response lists all 6 expected tools (<code>audit_mcp_server</code>, <code>diff_mcp_server</code>, <code>firewall_recent_events</code>, <code>run_self_test</code>, <code>capability_inventory</code>, <code>sweep_mcp_ecosystem</code>)</li>
+      <li><code>GET /architecture</code> returns 200 (public, no auth)</li>
+      <li><code>POST /tools/audit_mcp_server</code> without <code>x-api-key</code> returns 401 (auth-wall intact)</li>
+    </ul>
+    <div style="margin-top: 14px;">
+      Missing a tool in <code>/health</code> indicates a registration regression; a 401-becomes-200 indicates an auth middleware regression. Either fails the pipeline.
+    </div>
+  </div>
+
+  <div style="margin-top: 18px; padding: 14px 18px; border-left: 3px solid var(--purple); background: var(--surface-2); font-family: var(--font-body); font-size: 13px; color: var(--text-dim); line-height: 1.7;">
+    <strong style="color: var(--purple);">Deploy mechanism:</strong> Railway auto-deploys on push to <code>main</code> via <code>railway.toml</code> + <code>Dockerfile</code>. No manual trigger. The CI <code>smoke-test</code> stage's 60s pre-check gives Railway time to finish rolling. If CI smoke fails, the deploy is live but regressed &mdash; investigate Railway logs, not the CI runner.
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════
+     PART 7 — PORTFOLIO CROSS-REFERENCE
+     ════════════════════════════════════════════════════════ -->
+<hr class="divider-thick">
+<div class="section">
+  <div class="section-header">PART 7 &mdash; PORTFOLIO CROSS-REFERENCE</div>
   <div class="section-sub">Each repo remains independently maintained on npm / GitHub Marketplace &middot; this service is the orchestration + runtime layer, not a replacement</div>
 
   <div class="agent-panel">
@@ -1150,11 +1210,11 @@ p code, li code, td code {
 </div>
 
 <!-- ════════════════════════════════════════════════════════
-     PART 7 — PHASE ROADMAP
+     PART 8 — PHASE ROADMAP
      ════════════════════════════════════════════════════════ -->
 <hr class="divider-thick">
 <div class="section">
-  <div class="section-header">PART 7 &mdash; PHASE ROADMAP</div>
+  <div class="section-header">PART 8 &mdash; PHASE ROADMAP</div>
   <div class="section-sub">Phase 1/2/B/3 shipped &middot; Phase B-2 (volume persistence) + Phase 3 follow-up pending</div>
 
   <div class="data-table-wrap">
@@ -1210,11 +1270,11 @@ p code, li code, td code {
 </div>
 
 <!-- ════════════════════════════════════════════════════════
-     PART 8 — KNOWN ISSUES / DEFERRED
+     PART 9 — KNOWN ISSUES / DEFERRED
      ════════════════════════════════════════════════════════ -->
 <hr class="divider-thick">
 <div class="section">
-  <div class="section-header">PART 8 &mdash; KNOWN ISSUES / DEFERRED</div>
+  <div class="section-header">PART 9 &mdash; KNOWN ISSUES / DEFERRED</div>
   <div class="section-sub">Visibility over silence &middot; everything here is tracked, none is a blocker</div>
 
   <div class="jobs-2col">
