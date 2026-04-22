@@ -1,0 +1,1325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Security Agent // Tier 3 Architecture</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow+Condensed:wght@400;500;600;700&family=Barlow:wght@300;400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+/* ──────────────────────────────────────────────────────────────
+   AI SECURITY AGENT // ARCHITECTURE
+   Visual system mirrors Brain's ARCHITECTURE.html (same font stack,
+   same dark cyber/ops palette).
+   ACCENT CHOICE: purple / violet (#a855f7) is the tier-3 accent.
+   Brain = blue, Security Agent = red. Purple mirrors the CAMS tab
+   accent already used in Brain's frontend for "security operations"
+   feel and visually separates AI-native sec from CVE/bounty sec.
+   ──────────────────────────────────────────────────────────── */
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #080808;
+  --surface: #0e0e10;
+  --surface-2: #151518;
+  --surface-3: #1a1a1f;
+  --border: #222228;
+  --border-light: #2a2a32;
+  --text: #e8e8ec;
+  --text-dim: #888892;
+  --text-muted: #555560;
+
+  /* Primary accent — tier-3 purple */
+  --purple: #a855f7;
+  --purple-dim: #6b21a8;
+  --violet: #8b5cf6;
+  --violet-dim: #5b21b6;
+
+  /* Supporting palette */
+  --blue: #4488FF;
+  --blue-dim: #335599;
+  --gold: #FFD700;
+  --gold-dim: #99820a;
+  --green: #44BB44;
+  --green-dim: #2a7a2a;
+  --orange: #FF6600;
+  --orange-dim: #994400;
+  --red: #EE4444;
+  --red-dim: #992222;
+  --teal: #00BBAA;
+  --teal-dim: #007766;
+  --cyan: #00CCEE;
+  --cyan-dim: #008899;
+
+  --font-display: 'Bebas Neue', sans-serif;
+  --font-label: 'Barlow Condensed', sans-serif;
+  --font-body: 'Barlow', sans-serif;
+  --font-mono: 'Share Tech Mono', monospace;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.5;
+  padding: 0 0 40px;
+  -webkit-font-smoothing: antialiased;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg width='4' height='4' xmlns='http://www.w3.org/2000/svg'%3E%3Crect width='1' height='1' fill='%23ffffff' opacity='.02'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 0;
+}
+
+.wrapper {
+  position: relative;
+  z-index: 1;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+/* ── HEADER ── */
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 32px 0 24px;
+  border-bottom: 2px solid var(--purple);
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.header-left h1 {
+  font-family: var(--font-display);
+  font-size: 48px;
+  letter-spacing: 3px;
+  color: var(--purple);
+  line-height: 1;
+}
+
+.header-left .subtitle {
+  font-family: var(--font-label);
+  font-size: 16px;
+  color: var(--text-dim);
+  margin-top: 6px;
+  letter-spacing: 0.5px;
+  max-width: 720px;
+}
+
+.header-right {
+  text-align: right;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.8;
+  min-width: 280px;
+}
+
+.header-right span { color: var(--text-muted); }
+.header-right strong { color: var(--text); font-weight: 400; }
+
+/* ── STATS BAR ── */
+.stats-bar {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 8px;
+  margin: 20px 0 32px;
+}
+
+.stat-block {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 10px;
+  text-align: center;
+  transition: border-color 0.2s;
+}
+
+.stat-block:hover { border-color: var(--purple); }
+
+.stat-num {
+  font-family: var(--font-display);
+  font-size: 32px;
+  color: var(--purple);
+  line-height: 1;
+}
+
+.stat-num.gold { color: var(--gold); }
+.stat-num.blue { color: var(--blue); }
+.stat-num.teal { color: var(--teal); }
+.stat-num.orange { color: var(--orange); }
+.stat-num.green { color: var(--green); }
+.stat-num.red { color: var(--red); }
+.stat-num.cyan { color: var(--cyan); }
+
+.stat-label {
+  font-family: var(--font-label);
+  font-size: 12px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-top: 4px;
+}
+
+/* ── SECTION ── */
+.section { margin-top: 12px; }
+
+.section-header {
+  font-family: var(--font-display);
+  font-size: 28px;
+  letter-spacing: 2px;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.section-sub {
+  font-family: var(--font-label);
+  font-size: 14px;
+  color: var(--text-muted);
+  margin-bottom: 20px;
+  letter-spacing: 0.5px;
+}
+
+.divider-thick {
+  border: none;
+  height: 3px;
+  background: linear-gradient(90deg, transparent, var(--border-light) 15%, var(--border-light) 85%, transparent);
+  margin: 40px 0 20px;
+}
+
+/* ── TRIGGER BOX ── */
+.trigger-box {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px 28px;
+  max-width: 760px;
+  margin: 0 auto 8px;
+}
+
+.trigger-box h3 {
+  font-family: var(--font-label);
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.trigger-box p {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-top: 6px;
+  line-height: 1.7;
+}
+
+/* ── JOB CARDS ── */
+.jobs-2col { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+.jobs-3col { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+.jobs-4col { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+
+.job-box {
+  background: var(--surface);
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.job-box.blue { border-color: var(--blue-dim); }
+.job-box.teal { border-color: var(--teal-dim); }
+.job-box.red { border-color: var(--red-dim); }
+.job-box.gold { border-color: var(--gold-dim); }
+.job-box.green { border-color: var(--green-dim); }
+.job-box.purple { border-color: var(--purple-dim); }
+.job-box.violet { border-color: var(--violet-dim); }
+.job-box.orange { border-color: var(--orange-dim); }
+
+.job-header {
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.job-box.blue .job-header { background: linear-gradient(135deg, rgba(68,136,255,.15), rgba(68,136,255,.05)); }
+.job-box.teal .job-header { background: linear-gradient(135deg, rgba(0,187,170,.15), rgba(0,187,170,.05)); }
+.job-box.red .job-header { background: linear-gradient(135deg, rgba(238,68,68,.15), rgba(238,68,68,.05)); }
+.job-box.gold .job-header { background: linear-gradient(135deg, rgba(255,215,0,.15), rgba(255,215,0,.05)); }
+.job-box.green .job-header { background: linear-gradient(135deg, rgba(68,187,68,.15), rgba(68,187,68,.05)); }
+.job-box.purple .job-header { background: linear-gradient(135deg, rgba(168,85,247,.18), rgba(168,85,247,.05)); }
+.job-box.violet .job-header { background: linear-gradient(135deg, rgba(139,92,246,.18), rgba(139,92,246,.05)); }
+.job-box.orange .job-header { background: linear-gradient(135deg, rgba(255,102,0,.15), rgba(255,102,0,.05)); }
+
+.job-icon { font-size: 22px; line-height: 1; }
+
+.job-title {
+  font-family: var(--font-label);
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.job-box.blue .job-title { color: var(--blue); }
+.job-box.teal .job-title { color: var(--teal); }
+.job-box.red .job-title { color: var(--red); }
+.job-box.gold .job-title { color: var(--gold); }
+.job-box.green .job-title { color: var(--green); }
+.job-box.purple .job-title { color: var(--purple); }
+.job-box.violet .job-title { color: var(--violet); }
+.job-box.orange .job-title { color: var(--orange); }
+
+.job-runner {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  padding: 0 16px;
+  margin-top: -6px;
+  margin-bottom: 4px;
+}
+
+.job-body { padding: 10px 16px 16px; }
+
+.job-section-title {
+  font-family: var(--font-label);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  color: var(--text-muted);
+  margin: 10px 0 6px;
+  padding-bottom: 3px;
+  border-bottom: 1px solid var(--border);
+}
+
+.job-section-title:first-child { margin-top: 0; }
+
+.job-item {
+  font-size: 13px;
+  color: var(--text-dim);
+  padding: 3px 0 3px 14px;
+  position: relative;
+}
+
+.job-item::before {
+  content: '>';
+  position: absolute;
+  left: 0;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.job-item code,
+.trigger-box code,
+p code, li code, td code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text);
+  background: var(--surface-2);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+
+/* ── BADGES ── */
+.badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.badge {
+  font-family: var(--font-label);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  padding: 3px 10px;
+  border-radius: 20px;
+  white-space: nowrap;
+}
+
+.badge.gold { background: rgba(255,215,0,.12); color: var(--gold); border: 1px solid rgba(255,215,0,.25); }
+.badge.red { background: rgba(238,68,68,.12); color: var(--red); border: 1px solid rgba(238,68,68,.25); }
+.badge.green { background: rgba(68,187,68,.12); color: var(--green); border: 1px solid rgba(68,187,68,.25); }
+.badge.blue { background: rgba(68,136,255,.12); color: var(--blue); border: 1px solid rgba(68,136,255,.25); }
+.badge.teal { background: rgba(0,187,170,.12); color: var(--teal); border: 1px solid rgba(0,187,170,.25); }
+.badge.purple { background: rgba(168,85,247,.14); color: var(--purple); border: 1px solid rgba(168,85,247,.3); }
+.badge.violet { background: rgba(139,92,246,.14); color: var(--violet); border: 1px solid rgba(139,92,246,.3); }
+.badge.orange { background: rgba(255,102,0,.12); color: var(--orange); border: 1px solid rgba(255,102,0,.25); }
+.badge.gray { background: rgba(136,136,146,.12); color: var(--text-dim); border: 1px solid rgba(136,136,146,.25); }
+
+/* ── FLEET DIAGRAM (preformatted ASCII) ── */
+.fleet-diagram {
+  background: var(--surface);
+  border: 1px solid var(--purple-dim);
+  border-radius: 10px;
+  padding: 20px 24px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.7;
+  white-space: pre;
+  overflow-x: auto;
+  position: relative;
+}
+
+.fleet-diagram::before {
+  content: 'fleet.topology';
+  position: absolute;
+  top: -9px; left: 18px;
+  font-family: var(--font-label);
+  font-size: 11px;
+  letter-spacing: 1.5px;
+  padding: 0 8px;
+  background: var(--bg);
+  color: var(--purple);
+  text-transform: uppercase;
+}
+
+.fleet-diagram .brain { color: var(--blue); font-weight: 600; }
+.fleet-diagram .sec   { color: var(--red); font-weight: 600; }
+.fleet-diagram .aisec { color: var(--purple); font-weight: 600; }
+.fleet-diagram .note  { color: var(--text-muted); }
+.fleet-diagram .tool  { color: var(--teal); }
+
+/* ── FILE TREE ── */
+.file-tree {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px 24px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.8;
+  white-space: pre;
+  overflow-x: auto;
+}
+
+.file-tree .dir { color: var(--purple); font-weight: 600; }
+.file-tree .file { color: var(--text-dim); }
+.file-tree .comment { color: var(--text-muted); }
+
+/* ── DATA TABLE ── */
+.data-table-wrap {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.data-table thead th {
+  font-family: var(--font-label);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  color: var(--text-muted);
+  background: var(--surface-2);
+  text-align: left;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.data-table tbody td {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-dim);
+  vertical-align: top;
+}
+
+.data-table tbody tr:last-child td { border-bottom: none; }
+
+.data-table tbody tr:hover td { background: rgba(168,85,247,.04); }
+
+.data-table .method {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: var(--teal);
+  white-space: nowrap;
+}
+
+.data-table .method.post { color: var(--gold); }
+.data-table .method.get  { color: var(--teal); }
+
+.data-table .route {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.data-table .phase {
+  font-family: var(--font-label);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--purple);
+  text-align: center;
+  white-space: nowrap;
+}
+
+.data-table .phase.p1 { color: var(--green); }
+.data-table .phase.p2 { color: var(--blue); }
+.data-table .phase.p3 { color: var(--purple); }
+.data-table .phase.pb { color: var(--teal); }
+.data-table .phase.done { color: var(--green); }
+.data-table .phase.pending { color: var(--gold); }
+
+/* ── AGENT PANEL ── */
+.agent-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  margin-top: 16px;
+}
+
+.agent-panel-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: linear-gradient(135deg, rgba(168,85,247,.14), rgba(139,92,246,.06));
+}
+
+.agent-panel-header .icon { font-size: 26px; }
+
+.agent-panel-header h3 {
+  font-family: var(--font-display);
+  font-size: 22px;
+  letter-spacing: 2px;
+  color: var(--purple);
+}
+
+.agent-panel-header .sub {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-left: auto;
+}
+
+.agent-panel-body {
+  padding: 16px 20px;
+}
+
+/* ── ENV BAR ── */
+.env-bar {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px 20px;
+  margin-top: 32px;
+}
+
+.env-bar h3 {
+  font-family: var(--font-label);
+  font-size: 14px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+}
+
+.env-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.env-chip {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 12px;
+  color: var(--text-dim);
+}
+
+.env-chip .key { color: var(--purple); font-weight: 600; }
+.env-chip .val { color: var(--text-muted); }
+.env-chip.required { border-color: var(--purple-dim); }
+.env-chip.optional { border-style: dashed; }
+
+/* ── STEP LABEL ── */
+.step-label {
+  font-family: var(--font-label);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--text-muted);
+  text-align: center;
+  margin-bottom: 8px;
+}
+
+/* ── LEGEND ── */
+.legend {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 28px;
+  padding: 16px 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.legend-items { display: flex; gap: 20px; flex-wrap: wrap; }
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-label);
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+
+.legend-dot.green { background: var(--green); box-shadow: 0 0 6px rgba(68,187,68,.4); }
+.legend-dot.orange { background: var(--orange); box-shadow: 0 0 6px rgba(255,102,0,.4); }
+.legend-dot.red { background: var(--red); box-shadow: 0 0 6px rgba(238,68,68,.4); }
+.legend-dot.blue { background: var(--blue); box-shadow: 0 0 6px rgba(68,136,255,.4); }
+.legend-dot.purple { background: var(--purple); box-shadow: 0 0 8px rgba(168,85,247,.5); }
+.legend-dot.gold { background: var(--gold); box-shadow: 0 0 6px rgba(255,215,0,.4); }
+.legend-dot.teal { background: var(--teal); box-shadow: 0 0 6px rgba(0,187,170,.4); }
+
+.legend-right {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* ── REPO LIST (portfolio cross-ref) ── */
+.repo-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.repo-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  transition: border-color 0.2s;
+}
+
+.repo-card:hover { border-color: var(--purple); }
+
+.repo-card .repo-name {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--purple);
+  font-weight: 600;
+  margin-bottom: 6px;
+  word-break: break-all;
+}
+
+.repo-card .repo-role {
+  font-family: var(--font-label);
+  font-size: 13px;
+  color: var(--text);
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.repo-card .repo-hook {
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+
+.repo-card .repo-hook code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--teal);
+  background: var(--surface-2);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+
+/* ── CODE BLOCK ── */
+.code-block {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 18px 22px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.7;
+  white-space: pre;
+  overflow-x: auto;
+  position: relative;
+}
+
+.code-block::before {
+  content: attr(data-lang);
+  position: absolute;
+  top: -9px; right: 18px;
+  font-family: var(--font-label);
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  padding: 0 8px;
+  background: var(--bg);
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.code-block .k { color: var(--violet); }
+.code-block .s { color: var(--teal); }
+.code-block .c { color: var(--text-muted); font-style: italic; }
+.code-block .n { color: var(--gold); }
+
+/* ── MOBILE RESPONSIVE ── */
+@media (max-width: 900px) {
+  .wrapper { padding: 0 16px; }
+  .header { flex-direction: column; align-items: flex-start; }
+  .header-left h1 { font-size: 38px; }
+  .header-right { text-align: left; min-width: 0; }
+  .stats-bar { grid-template-columns: repeat(3, 1fr); }
+  .jobs-2col, .jobs-3col, .jobs-4col { grid-template-columns: 1fr; }
+  .repo-grid { grid-template-columns: 1fr; }
+  .section-header { font-size: 24px; }
+
+  /* Tables collapse into card-style rows on mobile */
+  .data-table thead { display: none; }
+  .data-table, .data-table tbody, .data-table tr, .data-table td { display: block; width: 100%; }
+  .data-table tr {
+    border-bottom: 1px solid var(--border-light);
+    padding: 10px 4px;
+  }
+  .data-table tbody td {
+    border-bottom: none;
+    padding: 4px 8px;
+    white-space: normal;
+  }
+  .data-table tbody td::before {
+    content: attr(data-label);
+    font-family: var(--font-label);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-muted);
+    display: block;
+    margin-bottom: 2px;
+  }
+}
+
+@media (max-width: 560px) {
+  .stats-bar { grid-template-columns: repeat(2, 1fr); }
+  .header-left h1 { font-size: 32px; letter-spacing: 2px; }
+  .fleet-diagram, .file-tree, .code-block { font-size: 11px; padding: 16px; }
+}
+
+</style>
+</head>
+<body>
+<div class="wrapper">
+
+<!-- ════════════════════════════════════════════════════════
+     HEADER
+     ════════════════════════════════════════════════════════ -->
+<div class="header">
+  <div class="header-left">
+    <h1>AI SECURITY AGENT // TIER 3</h1>
+    <div class="subtitle">
+      AI-native security tooling orchestration &mdash; detect &middot; inventory &middot; test &middot; generate &middot; defend. Single REST surface for Brain (tier 1) and Security Agent (tier 2).
+    </div>
+  </div>
+  <div class="header-right">
+    <span>Service:</span> <strong>ai-security-agent v0.1.0</strong><br>
+    <span>Runtime:</span> <strong>Node.js 20 + Express (ESM)</strong><br>
+    <span>Platform:</span> <strong>Railway &middot; Docker auto-build</strong><br>
+    <span>Updated:</span> <strong>April 22, 2026</strong>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════
+     STATS BAR
+     ════════════════════════════════════════════════════════ -->
+<div class="stats-bar">
+  <div class="stat-block">
+    <div class="stat-num">6</div>
+    <div class="stat-label">Tool Endpoints</div>
+  </div>
+  <div class="stat-block">
+    <div class="stat-num teal">4</div>
+    <div class="stat-label">Posture Routes</div>
+  </div>
+  <div class="stat-block">
+    <div class="stat-num green">7</div>
+    <div class="stat-label">Portfolio Repos</div>
+  </div>
+  <div class="stat-block">
+    <div class="stat-num gold">4</div>
+    <div class="stat-label">Phases Shipped</div>
+  </div>
+  <div class="stat-block">
+    <div class="stat-num blue">1</div>
+    <div class="stat-label">Daily Cron</div>
+  </div>
+  <div class="stat-block">
+    <div class="stat-num orange">3</div>
+    <div class="stat-label">Fleet Tiers</div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════
+     PART 1 — POSITION IN FLEET
+     ════════════════════════════════════════════════════════ -->
+<div class="section">
+  <div class="section-header">PART 1 &mdash; POSITION IN FLEET</div>
+  <div class="section-sub">Tier separation mirrors enterprise orgs &middot; tier 2 owns CVE/bounty, tier 3 owns AI-native</div>
+
+  <div class="fleet-diagram"><span class="brain">Brain (master hub — tier 1)</span>
+  │  4 proxy tools: <span class="tool">audit_mcp_server</span> · <span class="tool">diff_mcp_server</span>
+  │                 <span class="tool">firewall_recent_events</span> · <span class="tool">run_self_test</span>
+  │     └─▶  ai-security-agent /tools/*
+  │  cron callback: /security/mcp-manifests  ◀──┐
+  │                 /security/firewall/events ◀─┤
+  ▼                                              │
+<span class="sec">Security Agent (tier 2 — traditional CVE/bounty)</span> │
+  │  poll: /intel/ai-security <span class="note">(Phase 3 uplink)</span>   │
+  │     └─▶  ai-security-agent /intel/ai-security│
+  ▼                                              │
+<span class="aisec">AI Security Agent (tier 3 — this service) ──────┘</span>
+  │
+  ├── npm: @dj_abstract/mcp-audit                   <span class="note">(detect)</span>
+  ├── npm: @dj_abstract/agent-firewall              <span class="note">(defend)</span>
+  ├── npm: @dj_abstract/agent-capability-inventory  <span class="note">(inventory)</span>
+  └── npm: @dj_abstract/prompt-genesis              <span class="note">(generate + selfTest orchestrator)</span></div>
+
+  <div style="margin-top: 16px;">
+    <div class="trigger-box">
+      <h3 style="color: var(--purple);">Why a separate tier?</h3>
+      <p>All three tiers authenticate with a single shared <code>AGENT_API_KEY</code>, so tier-2 (CVE/bounty) and tier-3 (AI-native) can evolve independently without bundling the toolkit into their own dependency trees. Mirrors how enterprises run a dedicated AI security team alongside the traditional security team.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════
+     PART 2 — STACK & LAYOUT
+     ════════════════════════════════════════════════════════ -->
+<hr class="divider-thick">
+<div class="section">
+  <div class="section-header">PART 2 &mdash; STACK &amp; INTERNAL LAYOUT</div>
+  <div class="section-sub">Thin runtime &middot; composes `@dj_abstract/*` npm packages &middot; no child_process, no CLI shelling</div>
+
+  <div class="jobs-3col">
+    <div class="job-box purple">
+      <div class="job-header">
+        <span class="job-icon">&#x26A1;</span>
+        <span class="job-title">Runtime</span>
+      </div>
+      <div class="job-body">
+        <div class="job-item">Node.js 20+ (ESM)</div>
+        <div class="job-item">Express 4 &mdash; single mounted app</div>
+        <div class="job-item">Scheduling via <code>node-cron</code></div>
+        <div class="badges"><span class="badge purple">Thin wrapper</span></div>
+      </div>
+    </div>
+
+    <div class="job-box violet">
+      <div class="job-header">
+        <span class="job-icon">&#x1F4E6;</span>
+        <span class="job-title">Dependencies</span>
+      </div>
+      <div class="job-body">
+        <div class="job-item">Imports <code>@dj_abstract/*</code> as npm deps</div>
+        <div class="job-item">No <code>child_process</code>, no CLI shelling</div>
+        <div class="job-item">Pure library composition</div>
+        <div class="badges"><span class="badge violet">Portfolio reuse</span></div>
+      </div>
+    </div>
+
+    <div class="job-box teal">
+      <div class="job-header">
+        <span class="job-icon">&#x1F510;</span>
+        <span class="job-title">Auth &amp; Deploy</span>
+      </div>
+      <div class="job-body">
+        <div class="job-item">Shared <code>AGENT_API_KEY</code> via <code>x-api-key</code></div>
+        <div class="job-item">Railway auto-deploy from <code>main</code></div>
+        <div class="job-item">Dockerfile build, no volume yet (Phase B-2)</div>
+        <div class="badges"><span class="badge teal">Railway</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div style="margin-top: 28px;">
+    <div class="step-label">Internal Layout</div>
+    <div class="file-tree"><span class="dir">ai-security-agent/</span>
+├── <span class="dir">src/</span>
+│   ├── <span class="file">index.js</span>                <span class="comment"># Express app, auth gate, route wiring</span>
+│   ├── <span class="file">cron.js</span>                 <span class="comment"># Daily self-scan + in-memory baseline state</span>
+│   ├── <span class="dir">tools/</span>                  <span class="comment"># One handler per /tools/* endpoint</span>
+│   │   ├── <span class="file">audit-mcp-server.js</span>
+│   │   ├── <span class="file">diff-mcp-server.js</span>
+│   │   ├── <span class="file">firewall-events.js</span>
+│   │   ├── <span class="file">run-self-test.js</span>
+│   │   ├── <span class="file">capability-inventory.js</span>     <span class="comment">(Phase 3)</span>
+│   │   └── <span class="file">sweep-mcp-ecosystem.js</span>      <span class="comment">(Phase 3)</span>
+│   └── <span class="dir">routes/</span>
+│       └── <span class="file">ai-security-intel.js</span>        <span class="comment"># Consumer-ready snapshot for Security Agent</span>
+├── <span class="dir">docs/</span>
+│   └── <span class="file">ARCHITECTURE.md</span>         <span class="comment"># Source of truth for this doc</span>
+├── <span class="dir">.agents/</span>                    <span class="comment"># Parallel-build coordination notes (per-phase)</span>
+├── <span class="file">package.json</span>
+└── <span class="file">README.md</span></div>
+
+    <div style="margin-top: 14px; font-family: var(--font-body); font-size: 13px; color: var(--text-dim); line-height: 1.7;">
+      Convention: everything under <code>src/tools/</code> is pure data-gathering (no Express coupling) so handlers can be reused by the cron and by future MCP-transport paths. <code>src/index.js</code> is the only file that mounts Express.
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════
+     PART 3 — ENDPOINT REFERENCE
+     ════════════════════════════════════════════════════════ -->
+<hr class="divider-thick">
+<div class="section">
+  <div class="section-header">PART 3 &mdash; ENDPOINT REFERENCE</div>
+  <div class="section-sub">All <code>/tools/*</code>, <code>/ai-security/*</code>, and <code>/intel/*</code> routes gated on <code>x-api-key</code> when <code>AGENT_API_KEY</code> is set &middot; <code>/health</code> and <code>/architecture</code> always public</div>
+
+  <div class="data-table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th style="width:70px;">Method</th>
+          <th style="width:270px;">Route</th>
+          <th>Purpose</th>
+          <th style="width:70px; text-align:center;">Phase</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td data-label="Method"><span class="method get">GET</span></td>
+          <td data-label="Route"><span class="route">/health</span></td>
+          <td data-label="Purpose">Liveness probe. Reveals env-var-set booleans + tool list; no secrets.</td>
+          <td data-label="Phase"><span class="phase p1">1</span></td>
+        </tr>
+        <tr>
+          <td data-label="Method"><span class="method get">GET</span></td>
+          <td data-label="Route"><span class="route">/architecture</span></td>
+          <td data-label="Purpose">This document. Public, no auth &mdash; same pattern as Brain's <code>/architecture</code>.</td>
+          <td data-label="Phase"><span class="phase p1">1</span></td>
+        </tr>
+        <tr>
+          <td data-label="Method"><span class="method post">POST</span></td>
+          <td data-label="Route"><span class="route">/tools/audit_mcp_server</span></td>
+          <td data-label="Purpose"><code>@dj_abstract/mcp-audit</code> static scan of <code>{ manifest | manifestData | stdio | url }</code>.</td>
+          <td data-label="Phase"><span class="phase p1">1</span></td>
+        </tr>
+        <tr>
+          <td data-label="Method"><span class="method post">POST</span></td>
+          <td data-label="Route"><span class="route">/tools/diff_mcp_server</span></td>
+          <td data-label="Purpose"><code>mcp-audit diff</code> &mdash; rug-pull / drift between two reports.</td>
+          <td data-label="Phase"><span class="phase p1">1</span></td>
+        </tr>
+        <tr>
+          <td data-label="Method"><span class="method post">POST</span></td>
+          <td data-label="Route"><span class="route">/tools/firewall_recent_events</span></td>
+          <td data-label="Purpose">Proxy to Brain's <code>/security/firewall/events</code>. Returns recent <code>agent-firewall</code> activity.</td>
+          <td data-label="Phase"><span class="phase p1">1</span></td>
+        </tr>
+        <tr>
+          <td data-label="Method"><span class="method post">POST</span></td>
+          <td data-label="Route"><span class="route">/tools/run_self_test</span></td>
+          <td data-label="Purpose">Wraps <code>@dj_abstract/prompt-genesis</code> <code>selfTest()</code> &mdash; generate corpus, run through prompt-eval, return ship/hold decision.</td>
+          <td data-label="Phase"><span class="phase p2">2</span></td>
+        </tr>
+        <tr>
+          <td data-label="Method"><span class="method post">POST</span></td>
+          <td data-label="Route"><span class="route">/tools/capability_inventory</span></td>
+          <td data-label="Purpose"><code>@dj_abstract/agent-capability-inventory</code> fleet tool catalog w/ sensitivity tags. Accepts inline <code>manifestData</code> or filesystem <code>manifest</code> path(s).</td>
+          <td data-label="Phase"><span class="phase p3">3</span></td>
+        </tr>
+        <tr>
+          <td data-label="Method"><span class="method post">POST</span></td>
+          <td data-label="Route"><span class="route">/tools/sweep_mcp_ecosystem</span></td>
+          <td data-label="Purpose">Multi-target <code>mcp-audit</code> fan-out with bounded concurrency + fleet-level aggregation. Accepts <code>targets[]</code> or <code>baselinesDir</code>.</td>
+          <td data-label="Phase"><span class="phase p3">3</span></td>
+        </tr>
+        <tr>
+          <td data-label="Method"><span class="method get">GET</span></td>
+          <td data-label="Route"><span class="route">/ai-security/posture</span></td>
+          <td data-label="Purpose">Raw cron-scan state + baseline count + last-scan timestamp.</td>
+          <td data-label="Phase"><span class="phase p1">1</span></td>
+        </tr>
+        <tr>
+          <td data-label="Method"><span class="method get">GET</span></td>
+          <td data-label="Route"><span class="route">/ai-security/last-scan</span></td>
+          <td data-label="Purpose">Most recent scan summary (same shape as <code>getLastScan()</code>).</td>
+          <td data-label="Phase"><span class="phase p1">1</span></td>
+        </tr>
+        <tr>
+          <td data-label="Method"><span class="method post">POST</span></td>
+          <td data-label="Route"><span class="route">/ai-security/scan/trigger</span></td>
+          <td data-label="Purpose">Manual scan kickoff &mdash; runs <code>runSelfScan({ trigger: 'manual' })</code>.</td>
+          <td data-label="Phase"><span class="phase p1">1</span></td>
+        </tr>
+        <tr>
+          <td data-label="Method"><span class="method get">GET</span></td>
+          <td data-label="Route"><span class="route">/intel/ai-security</span></td>
+          <td data-label="Purpose">Consumer-ready snapshot: totals, per-server findings, high-priority findings, firewall 24h stats, freshness. Shaped for Security Agent polling.</td>
+          <td data-label="Phase"><span class="phase p3">3</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div style="margin-top: 14px; font-family: var(--font-body); font-size: 13px; color: var(--text-dim); line-height: 1.7;">
+    Request/response shapes for each tool live next to the handler in <code>src/tools/*.js</code> and in the phase notes under <code>.agents/</code>.
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════
+     PART 4 — CRON & STATE
+     ════════════════════════════════════════════════════════ -->
+<hr class="divider-thick">
+<div class="section">
+  <div class="section-header">PART 4 &mdash; CRON &amp; STATE SHAPE</div>
+  <div class="section-sub">Managed by <code>src/cron.js::startSchedule()</code> &middot; armed when Express starts listening</div>
+
+  <div class="jobs-2col">
+    <div class="job-box purple">
+      <div class="job-header">
+        <span class="job-icon">&#x23F0;</span>
+        <span class="job-title">Daily Self-Scan</span>
+      </div>
+      <div class="job-runner">0 3 * * * &middot; 03:00 UTC</div>
+      <div class="job-body">
+        <div class="job-section-title">Flow</div>
+        <div class="job-item">Fetch Brain's manifests via <code>GET /security/mcp-manifests</code></div>
+        <div class="job-item">Audit <code>brain-tools</code> + <code>brain-exec</code> via mcp-audit</div>
+        <div class="job-item">Diff against in-memory baseline (last good scan)</div>
+        <div class="job-item">Critical drift &rarr; Telegram via Brain's <code>POST /telegram/send</code></div>
+        <div class="badges">
+          <span class="badge purple">Daily</span>
+          <span class="badge red">Drift alerts</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="job-box violet">
+      <div class="job-header">
+        <span class="job-icon">&#x1F680;</span>
+        <span class="job-title">Boot One-Shot</span>
+      </div>
+      <div class="job-runner">+5s after app.listen()</div>
+      <div class="job-body">
+        <div class="job-section-title">Purpose</div>
+        <div class="job-item">Establishes the baseline on cold boot</div>
+        <div class="job-item">Proves the path end-to-end before cron fires</div>
+        <div class="job-item">First post-restart scan re-seeds baseline (Phase B-1)</div>
+        <div class="badges">
+          <span class="badge violet">Startup</span>
+          <span class="badge gray">In-memory only</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="margin-top: 24px;">
+    <div class="step-label">State Shape &mdash; src/cron.js</div>
+    <div class="code-block" data-lang="javascript">{
+  <span class="k">baselines</span>: <span class="n">Map</span>&lt;serverName, mcpAuditReport&gt;,  <span class="c">// in-memory, Phase B-1</span>
+  <span class="k">lastRun</span>:   ISO8601 | <span class="k">null</span>,
+  <span class="k">lastScan</span>:  { <span class="k">trigger</span>, <span class="k">startedAt</span>, <span class="k">servers</span>[], <span class="k">diffs</span>[] } | <span class="k">null</span>,
+  <span class="k">lastError</span>: { <span class="k">at</span>, <span class="k">message</span> } | <span class="k">null</span>,
+}</div>
+    <div style="margin-top: 12px; font-family: var(--font-body); font-size: 13px; color: var(--text-dim); line-height: 1.7;">
+      The baseline is rebuilt on every scan (last good scan becomes the new baseline) so drift detection is always relative to the most recent clean state.
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════
+     PART 5 — ENVIRONMENT VARIABLES
+     ════════════════════════════════════════════════════════ -->
+<hr class="divider-thick">
+<div class="section">
+  <div class="section-header">PART 5 &mdash; ENVIRONMENT VARIABLES</div>
+  <div class="section-sub">Railway secrets &middot; solid border = required &middot; dashed = optional</div>
+
+  <div class="env-bar">
+    <h3>Required / Conditional</h3>
+    <div class="env-chips">
+      <div class="env-chip required"><span class="key">AGENT_API_KEY</span> <span class="val">= shared fleet secret (x-api-key header)</span></div>
+      <div class="env-chip required"><span class="key">BRAIN_API_URL</span> <span class="val">= Brain production URL (cron dep)</span></div>
+      <div class="env-chip required"><span class="key">BRAIN_API_KEY</span> <span class="val">= Brain's API key for manifests + telegram</span></div>
+      <div class="env-chip required"><span class="key">ANTHROPIC_API_KEY</span> <span class="val">= prompt-eval judge (run_self_test)</span></div>
+      <div class="env-chip optional"><span class="key">GROQ_API_KEY</span> <span class="val">= required if generator/target is Groq</span></div>
+      <div class="env-chip optional"><span class="key">API_KEY</span> <span class="val">= legacy alias for AGENT_API_KEY</span></div>
+      <div class="env-chip optional"><span class="key">PORT</span> <span class="val">= Railway auto-assigns &middot; dev defaults 3100</span></div>
+    </div>
+  </div>
+
+  <div style="margin-top: 14px; font-family: var(--font-body); font-size: 13px; color: var(--text-dim); line-height: 1.7;">
+    If <code>AGENT_API_KEY</code> is unset, auth is disabled &mdash; dev convenience only, never safe for production. The legacy alias <code>API_KEY</code> is still accepted for backward compatibility with older deployments.
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════
+     PART 6 — PORTFOLIO CROSS-REFERENCE
+     ════════════════════════════════════════════════════════ -->
+<hr class="divider-thick">
+<div class="section">
+  <div class="section-header">PART 6 &mdash; PORTFOLIO CROSS-REFERENCE</div>
+  <div class="section-sub">Each repo remains independently maintained on npm / GitHub Marketplace &middot; this service is the orchestration + runtime layer, not a replacement</div>
+
+  <div class="agent-panel">
+    <div class="agent-panel-header">
+      <span class="icon">&#x1F9E9;</span>
+      <h3>DETECT &middot; INVENTORY &middot; TEST &middot; GENERATE &middot; DEFEND</h3>
+      <span class="sub">7 repos &middot; MIT &middot; public portfolio</span>
+    </div>
+    <div class="agent-panel-body">
+      <div class="repo-grid">
+
+        <div class="repo-card">
+          <div class="repo-name">mcp-audit</div>
+          <div class="repo-role">Static MCP analyzer &mdash; <code>audit()</code> + <code>diff()</code> library</div>
+          <div class="repo-hook">Powers <code>audit_mcp_server</code>, <code>diff_mcp_server</code>, <code>sweep_mcp_ecosystem</code>, and the daily cron.</div>
+        </div>
+
+        <div class="repo-card">
+          <div class="repo-name">mcp-audit-action</div>
+          <div class="repo-role">GitHub Action wrapper &mdash; SARIF upload</div>
+          <div class="repo-hook">Out-of-band. Used in CI on portfolio repos rather than called by this service.</div>
+        </div>
+
+        <div class="repo-card">
+          <div class="repo-name">mcp-audit-sweep</div>
+          <div class="repo-role">Reproducible 30-server public audit</div>
+          <div class="repo-hook"><code>sweep_mcp_ecosystem</code> dogfoods the same dataset via <code>baselinesDir</code>.</div>
+        </div>
+
+        <div class="repo-card">
+          <div class="repo-name">agent-capability-inventory</div>
+          <div class="repo-role">Fleet tool catalog + sensitivity tags</div>
+          <div class="repo-hook">Direct dep of <code>capability_inventory</code>. BigID-shaped governance layer.</div>
+        </div>
+
+        <div class="repo-card">
+          <div class="repo-name">prompt-eval</div>
+          <div class="repo-role">Runtime injection eval harness</div>
+          <div class="repo-hook">Called transitively by <code>run_self_test</code> via <code>prompt-genesis selfTest()</code>.</div>
+        </div>
+
+        <div class="repo-card">
+          <div class="repo-name">prompt-genesis</div>
+          <div class="repo-role">Adversarial corpus generator + <code>selfTest()</code> orchestrator</div>
+          <div class="repo-hook">Direct dep of <code>run_self_test</code>. Ship/hold decision returned to caller.</div>
+        </div>
+
+        <div class="repo-card">
+          <div class="repo-name">agent-firewall</div>
+          <div class="repo-role">Call-time defensive middleware (runs on Brain)</div>
+          <div class="repo-hook"><code>firewall_recent_events</code> proxies Brain's activity log &mdash; the firewall itself lives on Brain.</div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════
+     PART 7 — PHASE ROADMAP
+     ════════════════════════════════════════════════════════ -->
+<hr class="divider-thick">
+<div class="section">
+  <div class="section-header">PART 7 &mdash; PHASE ROADMAP</div>
+  <div class="section-sub">Phase 1/2/B/3 shipped &middot; Phase B-2 (volume persistence) + Phase 3 follow-up pending</div>
+
+  <div class="data-table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th style="width:120px;">Phase</th>
+          <th style="width:110px;">Status</th>
+          <th style="width:130px;">Shipped</th>
+          <th>Scope</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td data-label="Phase"><span class="phase p1">Phase 1</span></td>
+          <td data-label="Status"><span class="badge green">complete</span></td>
+          <td data-label="Shipped"><span class="route">2026-04-20</span></td>
+          <td data-label="Scope"><code>audit_mcp_server</code>, <code>diff_mcp_server</code>, <code>firewall_recent_events</code>; posture + last-scan + manual-trigger endpoints</td>
+        </tr>
+        <tr>
+          <td data-label="Phase"><span class="phase p2">Phase 2</span></td>
+          <td data-label="Status"><span class="badge green">complete</span></td>
+          <td data-label="Shipped"><span class="route">2026-04-20</span></td>
+          <td data-label="Scope"><code>run_self_test</code> &mdash; prompt-genesis <code>selfTest()</code> orchestration with ship/hold decision</td>
+        </tr>
+        <tr>
+          <td data-label="Phase"><span class="phase pb">Phase B</span></td>
+          <td data-label="Status"><span class="badge green">complete</span></td>
+          <td data-label="Shipped"><span class="route">2026-04-20</span></td>
+          <td data-label="Scope">Daily self-scan cron (03:00 UTC + boot-run), in-memory baseline state, critical-drift Telegram alerts via Brain</td>
+        </tr>
+        <tr>
+          <td data-label="Phase"><span class="phase p3">Phase 3</span></td>
+          <td data-label="Status"><span class="badge green">complete</span></td>
+          <td data-label="Shipped"><span class="route">2026-04-22</span></td>
+          <td data-label="Scope"><code>capability_inventory</code>, <code>sweep_mcp_ecosystem</code>, <code>/intel/ai-security</code> Security Agent uplink</td>
+        </tr>
+        <tr>
+          <td data-label="Phase"><span class="phase pb">Phase B-2</span></td>
+          <td data-label="Status"><span class="badge gold">pending</span></td>
+          <td data-label="Shipped"><span class="route">&mdash;</span></td>
+          <td data-label="Scope">Railway volume for baseline persistence across deploys</td>
+        </tr>
+        <tr>
+          <td data-label="Phase"><span class="phase p3">Phase 3 follow-up</span></td>
+          <td data-label="Status"><span class="badge gold">pending</span></td>
+          <td data-label="Shipped"><span class="route">&mdash;</span></td>
+          <td data-label="Scope">Full Security Agent integration: pull consumer wired into Security Agent's <code>src/intel.js</code> 5-min polling engine so <code>/intel/security</code> correlates CVE/bounty intel with AI-native posture</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════
+     PART 8 — KNOWN ISSUES / DEFERRED
+     ════════════════════════════════════════════════════════ -->
+<hr class="divider-thick">
+<div class="section">
+  <div class="section-header">PART 8 &mdash; KNOWN ISSUES / DEFERRED</div>
+  <div class="section-sub">Visibility over silence &middot; everything here is tracked, none is a blocker</div>
+
+  <div class="jobs-2col">
+
+    <div class="job-box orange">
+      <div class="job-header">
+        <span class="job-icon">&#x1F4BE;</span>
+        <span class="job-title">Baseline Persistence</span>
+      </div>
+      <div class="job-body">
+        <div class="job-item">Currently in-memory only (Phase B-1)</div>
+        <div class="job-item">Railway restart / redeploy wipes baselines</div>
+        <div class="job-item">First post-restart scan re-seeds rather than flagging drift</div>
+        <div class="job-item">Fix: Phase B-2 Railway volume mount</div>
+        <div class="badges"><span class="badge orange">Phase B-2</span></div>
+      </div>
+    </div>
+
+    <div class="job-box red">
+      <div class="job-header">
+        <span class="job-icon">&#x1F511;</span>
+        <span class="job-title">Supabase JWT Rotation</span>
+      </div>
+      <div class="job-body">
+        <div class="job-item">Deferred &mdash; see <code>INCIDENT-RESPONSE-2026-04-21.md</code></div>
+        <div class="job-item">Mitigation plan documented</div>
+        <div class="job-item">Not blocking current production traffic</div>
+        <div class="badges"><span class="badge red">Deferred</span></div>
+      </div>
+    </div>
+
+    <div class="job-box gold">
+      <div class="job-header">
+        <span class="job-icon">&#x1F504;</span>
+        <span class="job-title">Anthropic Workspace Migration</span>
+      </div>
+      <div class="job-body">
+        <div class="job-item">Scheduled week of 2026-04-27</div>
+        <div class="job-item">Fleet moves from master key &rarr; per-project scoped keys</div>
+        <div class="job-item"><code>run_self_test</code> needs re-pointing to ai-security-agent-scoped key</div>
+        <div class="job-item">Any future Claude-calling tools here inherit the same work</div>
+        <div class="badges"><span class="badge gold">Scheduled</span></div>
+      </div>
+    </div>
+
+    <div class="job-box teal">
+      <div class="job-header">
+        <span class="job-icon">&#x1F441;</span>
+        <span class="job-title">Health Endpoint Disclosure</span>
+      </div>
+      <div class="job-body">
+        <div class="job-item"><code>/health</code> is public &mdash; intentional</div>
+        <div class="job-item">Reveals <code>*_set</code> booleans for each configured env var</div>
+        <div class="job-item">Fleet diagnostics &gt; disclosure surface</div>
+        <div class="job-item">No secret values exposed, only "is it wired"</div>
+        <div class="badges"><span class="badge teal">By design</span></div>
+      </div>
+    </div>
+
+    <div class="job-box violet">
+      <div class="job-header">
+        <span class="job-icon">&#x1F4B0;</span>
+        <span class="job-title">run_self_test Cost</span>
+      </div>
+      <div class="job-body">
+        <div class="job-item">Each call exercises prompt-genesis + prompt-eval end-to-end</div>
+        <div class="job-item">Intended for on-demand CI-style use</div>
+        <div class="job-item">Not safe to expose in user-facing chat loops</div>
+        <div class="job-item">Budget guidance documented in <code>docs/ARCHITECTURE.md</code></div>
+        <div class="badges"><span class="badge violet">Operational note</span></div>
+      </div>
+    </div>
+
+    <div class="job-box blue">
+      <div class="job-header">
+        <span class="job-icon">&#x1F517;</span>
+        <span class="job-title">Phase 3 Follow-up</span>
+      </div>
+      <div class="job-body">
+        <div class="job-item">Pull consumer on Security Agent not yet wired</div>
+        <div class="job-item">Target: <code>src/intel.js</code> 5-min poll loop</div>
+        <div class="job-item">Correlates AI-native posture with CVE/bounty intel</div>
+        <div class="job-item">Security Agent side of the uplink</div>
+        <div class="badges"><span class="badge blue">Tier 2 task</span></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════
+     LEGEND
+     ════════════════════════════════════════════════════════ -->
+<div class="legend">
+  <div class="legend-items">
+    <div class="legend-item"><div class="legend-dot purple"></div> AI-native security (tier 3)</div>
+    <div class="legend-item"><div class="legend-dot red"></div> Traditional security (tier 2)</div>
+    <div class="legend-item"><div class="legend-dot blue"></div> Brain master hub (tier 1)</div>
+    <div class="legend-item"><div class="legend-dot teal"></div> Portfolio npm deps</div>
+    <div class="legend-item"><div class="legend-dot gold"></div> Pending / scheduled</div>
+    <div class="legend-item"><div class="legend-dot green"></div> Shipped</div>
+  </div>
+  <div class="legend-right">AI SECURITY AGENT &middot; v0.1.0 &middot; TIER 3 &middot; 2026</div>
+</div>
+
+</div><!-- /wrapper -->
+</body>
+</html>

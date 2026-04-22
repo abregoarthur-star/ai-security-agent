@@ -1,4 +1,6 @@
 import express from 'express';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { auditMcpServer } from './tools/audit-mcp-server.js';
 import { diffMcpServer } from './tools/diff-mcp-server.js';
 import { firewallRecentEvents } from './tools/firewall-events.js';
@@ -9,8 +11,14 @@ import { getAiSecurityIntel } from './routes/ai-security-intel.js';
 import { startSchedule, getLastScan, runSelfScan } from './cron.js';
 
 const PORT = process.env.PORT || 3100;
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 app.use(express.json({ limit: '5mb' }));
+
+// ─── Architecture doc (public, no auth) ──────────────────────
+app.get('/architecture', (_req, res) => {
+  res.sendFile(path.join(__dirname, '..', 'ARCHITECTURE.html'));
+});
 
 // ─── Health ──────────────────────────────────────────────────
 app.get('/health', (_req, res) => {
