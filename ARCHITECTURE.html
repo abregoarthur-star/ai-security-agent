@@ -736,6 +736,42 @@ p code, li code, td code {
   .fleet-diagram, .file-tree, .code-block { font-size: 11px; padding: 16px; }
 }
 
+/* ────────────────────────────────────────────────────────
+   PIPELINE FLOW DIAGRAM  — mirrors Brain's ARCHITECTURE.html
+   Used for PART 6 CI/CD visual (Push → Gate → Parallel → Smoke)
+   ──────────────────────────────────────────────────────── */
+.centered-box { max-width: 620px; margin: 0 auto; }
+
+.arrow-down {
+  display: flex; flex-direction: column; align-items: center; padding: 4px 0;
+}
+.arrow-down .line { width: 2px; height: 28px; background: linear-gradient(180deg, var(--border-light), var(--text-muted)); }
+.arrow-down .triangle {
+  width: 0; height: 0;
+  border-left: 7px solid transparent; border-right: 7px solid transparent;
+  border-top: 9px solid var(--text-muted);
+}
+
+.arrow-split {
+  display: flex; flex-direction: column; align-items: center; padding: 4px 0;
+}
+.arrow-split .stem { width: 2px; height: 20px; background: var(--text-muted); }
+.arrow-split .bar { position: relative; height: 2px; background: var(--text-muted); width: 80%; }
+.arrow-split .legs { display: flex; justify-content: space-between; width: 80%; }
+.arrow-split .leg { display: flex; flex-direction: column; align-items: center; }
+.arrow-split .leg .line { width: 2px; height: 20px; background: var(--text-muted); }
+.arrow-split .leg .triangle { width: 0; height: 0; border-left: 6px solid transparent; border-right: 6px solid transparent; border-top: 8px solid var(--text-muted); }
+
+.arrow-merge {
+  display: flex; flex-direction: column; align-items: center; padding: 4px 0;
+}
+.arrow-merge .legs { display: flex; justify-content: space-between; width: 80%; }
+.arrow-merge .leg { display: flex; flex-direction: column; align-items: center; }
+.arrow-merge .leg .line { width: 2px; height: 20px; background: var(--text-muted); }
+.arrow-merge .bar { height: 2px; background: var(--text-muted); width: 80%; }
+.arrow-merge .stem { width: 2px; height: 20px; background: linear-gradient(180deg, var(--text-muted), var(--border-light)); }
+.arrow-merge .triangle { width: 0; height: 0; border-left: 7px solid transparent; border-right: 7px solid transparent; border-top: 9px solid var(--text-muted); }
+
 </style>
 </head>
 <body>
@@ -1093,55 +1129,123 @@ p code, li code, td code {
   <div class="section-header">PART 6 &mdash; CI/CD + DEPLOYMENT AUTOMATION</div>
   <div class="section-sub">Every push to main runs gitleaks + npm audit + syntax check + post-deploy smoke &middot; matches Brain + Travel Optimizer fleet pattern &middot; no merge to main without secrets gate</div>
 
-  <div class="data-table-wrap" style="margin-top: 18px;">
-    <table class="data-table">
-      <thead>
-        <tr>
-          <th style="width:160px;">Stage</th>
-          <th style="width:140px;">Depends on</th>
-          <th>What it does</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td data-label="Stage"><code>secrets-gate</code></td>
-          <td data-label="Depends on"><span class="route">&mdash;</span></td>
-          <td data-label="What it does">Gitleaks scan; blocks everything downstream on a committed credential</td>
-        </tr>
-        <tr>
-          <td data-label="Stage"><code>security-audit</code></td>
-          <td data-label="Depends on"><code>secrets-gate</code></td>
-          <td data-label="What it does"><code>npm audit --audit-level=high</code> on root deps</td>
-        </tr>
-        <tr>
-          <td data-label="Stage"><code>syntax-check</code></td>
-          <td data-label="Depends on"><code>secrets-gate</code></td>
-          <td data-label="What it does"><code>node --check</code> on <code>src/index.js</code>, <code>src/cron.js</code>, <code>src/routes/*.js</code>, <code>src/tools/*.js</code></td>
-        </tr>
-        <tr>
-          <td data-label="Stage"><code>smoke-test</code></td>
-          <td data-label="Depends on"><code>security-audit</code> + <code>syntax-check</code></td>
-          <td data-label="What it does">Post-deploy verification against Railway production (60s deploy wait first). Only runs on push to <code>main</code>.</td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-
-  <div style="margin-top: 18px; font-family: var(--font-body); font-size: 13px; color: var(--text-dim); line-height: 1.7;">
-    <strong style="color: var(--text);">Smoke test asserts:</strong>
-    <ul style="margin-top: 8px; margin-left: 20px; line-height: 1.8;">
-      <li><code>GET /health</code> returns 200</li>
-      <li><code>/health</code> response lists all 6 expected tools (<code>audit_mcp_server</code>, <code>diff_mcp_server</code>, <code>firewall_recent_events</code>, <code>run_self_test</code>, <code>capability_inventory</code>, <code>sweep_mcp_ecosystem</code>)</li>
-      <li><code>GET /architecture</code> returns 200 (public, no auth)</li>
-      <li><code>POST /tools/audit_mcp_server</code> without <code>x-api-key</code> returns 401 (auth-wall intact)</li>
-    </ul>
-    <div style="margin-top: 14px;">
-      Missing a tool in <code>/health</code> indicates a registration regression; a 401-becomes-200 indicates an auth middleware regression. Either fails the pipeline.
+  <!-- Trigger banner -->
+  <div style="margin-top: 18px;">
+    <div class="step-label">GitHub Actions CI/CD Pipeline</div>
+    <div class="trigger-box" style="max-width: 100%; padding: 16px;">
+      <h3 style="color: var(--purple);">Push to <code>main</code> &rarr; CI Pipeline &rarr; Railway Auto-Deploy</h3>
+      <p>.github/workflows/ci.yml &middot; Runs on every push and PR to main &middot; Mirrors Brain's pattern</p>
     </div>
   </div>
 
-  <div style="margin-top: 18px; padding: 14px 18px; border-left: 3px solid var(--purple); background: var(--surface-2); font-family: var(--font-body); font-size: 13px; color: var(--text-dim); line-height: 1.7;">
-    <strong style="color: var(--purple);">Deploy mechanism:</strong> Railway auto-deploys on push to <code>main</code> via <code>railway.toml</code> + <code>Dockerfile</code>. No manual trigger. The CI <code>smoke-test</code> stage's 60s pre-check gives Railway time to finish rolling. If CI smoke fails, the deploy is live but regressed &mdash; investigate Railway logs, not the CI runner.
+  <div class="arrow-down"><div class="line"></div><div class="triangle"></div></div>
+
+  <!-- Stage 1: Secrets Gate -->
+  <div class="step-label">Stage 1 &mdash; Secrets Scan (Blocks Pipeline)</div>
+  <div class="centered-box" style="max-width: 720px;">
+    <div class="job-box red">
+      <div class="job-header">
+        <span class="job-icon">&#x1F50D;</span>
+        <span class="job-title">Gitleaks Secrets Scan</span>
+      </div>
+      <div class="job-runner">gitleaks/gitleaks-action@v2 &middot; runs first &middot; blocks on detection</div>
+      <div class="job-body">
+        <div class="job-item">Scans entire repo history for leaked API keys, tokens, passwords</div>
+        <div class="job-item">Detects: Anthropic keys, Groq keys, AWS keys, generic secrets</div>
+        <div class="job-item">Pipeline FAILS if any secret found &mdash; nothing deploys</div>
+        <div class="badges">
+          <span class="badge red">Gate keeper</span>
+          <span class="badge gray">Runs before all other jobs</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="arrow-split">
+    <div class="stem"></div>
+    <div class="bar"></div>
+    <div class="legs">
+      <div class="leg"><div class="line"></div><div class="triangle"></div></div>
+      <div class="leg"><div class="line"></div><div class="triangle"></div></div>
+    </div>
+  </div>
+
+  <!-- Stage 2: Parallel Quality Checks -->
+  <div class="step-label">Stage 2 &mdash; Parallel Quality Checks</div>
+  <div class="jobs-2col">
+
+    <div class="job-box blue">
+      <div class="job-header">
+        <span class="job-icon">&#x1F4E6;</span>
+        <span class="job-title">Dependency Audit</span>
+      </div>
+      <div class="job-runner">npm audit &middot; root deps &middot; severity high</div>
+      <div class="job-body">
+        <div class="job-item"><code>npm audit --audit-level=high</code></div>
+        <div class="job-item">Flags critical/high CVEs in npm dependencies</div>
+        <div class="job-item">Surfaces vulnerable transitive deps in prompt-eval / prompt-genesis / mcp-audit</div>
+        <div class="badges"><span class="badge blue">Root package only</span></div>
+      </div>
+    </div>
+
+    <div class="job-box green">
+      <div class="job-header">
+        <span class="job-icon">&#x2699;&#xFE0F;</span>
+        <span class="job-title">Syntax Validation</span>
+      </div>
+      <div class="job-runner">node --check &middot; all backend .js files</div>
+      <div class="job-body">
+        <div class="job-item"><code>node --check</code> on <code>src/index.js</code></div>
+        <div class="job-item"><code>node --check</code> on <code>src/cron.js</code></div>
+        <div class="job-item"><code>node --check</code> on <code>src/routes/*.js</code></div>
+        <div class="job-item"><code>node --check</code> on <code>src/tools/*.js</code></div>
+        <div class="job-item">Catches syntax errors before deploy</div>
+        <div class="badges"><span class="badge green">Zero-dependency check</span></div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="arrow-merge">
+    <div class="legs">
+      <div class="leg"><div class="line"></div></div>
+      <div class="leg"><div class="line"></div></div>
+    </div>
+    <div class="bar"></div>
+    <div class="stem"></div>
+    <div class="triangle"></div>
+  </div>
+
+  <!-- Stage 3: Post-Deploy Smoke Tests -->
+  <div class="step-label">Stage 3 &mdash; Post-Deploy Smoke Tests</div>
+  <div class="centered-box" style="max-width: 720px;">
+    <div class="job-box violet">
+      <div class="job-header">
+        <span class="job-icon">&#x1F6A8;</span>
+        <span class="job-title">Production Smoke Tests</span>
+      </div>
+      <div class="job-runner">curl against Railway production &middot; 60s deploy wait &middot; push-to-main only</div>
+      <div class="job-body">
+        <div class="job-section-title">Asserts</div>
+        <div class="job-item"><code>GET /health</code> returns 200</div>
+        <div class="job-item"><code>/health</code> lists all 6 tools (<code>audit_mcp_server</code>, <code>diff_mcp_server</code>, <code>firewall_recent_events</code>, <code>run_self_test</code>, <code>capability_inventory</code>, <code>sweep_mcp_ecosystem</code>)</div>
+        <div class="job-item"><code>GET /architecture</code> returns 200 (public, no auth)</div>
+        <div class="job-item"><code>POST /tools/audit_mcp_server</code> without <code>x-api-key</code> returns 401</div>
+        <div class="job-section-title">Regression semantics</div>
+        <div class="job-item">Missing tool in <code>/health</code> &rarr; registration regression</div>
+        <div class="job-item">401 becomes 200 &rarr; auth middleware regression</div>
+        <div class="job-item">Either failure mode fails the pipeline</div>
+        <div class="badges">
+          <span class="badge violet">Runs post-deploy</span>
+          <span class="badge gray">Push to main only</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Deploy mechanism callout -->
+  <div style="margin-top: 24px; padding: 14px 18px; border-left: 3px solid var(--purple); background: var(--surface-2); font-family: var(--font-body); font-size: 13px; color: var(--text-dim); line-height: 1.7;">
+    <strong style="color: var(--purple);">Deploy mechanism:</strong> Railway auto-deploys on push to <code>main</code> via <code>railway.toml</code> + <code>Dockerfile</code>. No manual trigger. The CI <code>smoke-test</code> stage's 60s pre-check gives Railway time to finish rolling. If CI smoke fails, the deploy is live but regressed &mdash; investigate Railway logs, not the CI runner. Docs-only commits may not trigger auto-deploy (observed 2026-04-22); force with an empty commit if the <code>/health</code> <code>uptime</code> field hasn't reset within 2 minutes of push.
   </div>
 </div>
 
