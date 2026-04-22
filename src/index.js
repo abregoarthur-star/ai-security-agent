@@ -3,6 +3,9 @@ import { auditMcpServer } from './tools/audit-mcp-server.js';
 import { diffMcpServer } from './tools/diff-mcp-server.js';
 import { firewallRecentEvents } from './tools/firewall-events.js';
 import { runSelfTest } from './tools/run-self-test.js';
+import { capabilityInventory } from './tools/capability-inventory.js';
+import { sweepMcpEcosystem } from './tools/sweep-mcp-ecosystem.js';
+import { getAiSecurityIntel } from './routes/ai-security-intel.js';
 import { startSchedule, getLastScan, runSelfScan } from './cron.js';
 
 const PORT = process.env.PORT || 3100;
@@ -16,7 +19,7 @@ app.get('/health', (_req, res) => {
     version: '0.1.0',
     status: 'ok',
     uptime: process.uptime(),
-    tools: ['audit_mcp_server', 'diff_mcp_server', 'firewall_recent_events', 'run_self_test'],
+    tools: ['audit_mcp_server', 'diff_mcp_server', 'firewall_recent_events', 'run_self_test', 'capability_inventory', 'sweep_mcp_ecosystem'],
     env: {
       AGENT_API_KEY_set:  !!(process.env.AGENT_API_KEY || process.env.API_KEY),
       AGENT_API_KEY_len:  (process.env.AGENT_API_KEY || process.env.API_KEY || '').length,
@@ -71,6 +74,35 @@ app.post('/tools/run_self_test', requireApiKey, async (req, res) => {
     res.json(result);
   } catch (err) {
     res.status(400).json({ error: err.message });
+  }
+});
+
+app.post('/tools/capability_inventory', requireApiKey, async (req, res) => {
+  try {
+    const result = await capabilityInventory(req.body);
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.post('/tools/sweep_mcp_ecosystem', requireApiKey, async (req, res) => {
+  try {
+    const result = await sweepMcpEcosystem(req.body);
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// ─── Security Agent uplink ───────────────────────────────────
+app.get('/intel/ai-security', requireApiKey, async (_req, res) => {
+  try {
+    const intel = await getAiSecurityIntel();
+    res.json(intel);
+  } catch (err) {
+    console.error('[ai-sec-agent] /intel/ai-security failed:', err);
+    res.status(500).json({ error: 'internal_error', message: err.message });
   }
 });
 
