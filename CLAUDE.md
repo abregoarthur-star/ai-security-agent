@@ -53,6 +53,7 @@ Expose the same tools as an MCP server over Streamable HTTP at `/mcp` using `@mo
 | `BRAIN_API_URL` | Brain prod URL — used by `firewallRecentEvents`. |
 | `BRAIN_API_KEY` | Brain's API key for `/security/firewall/events`. |
 | `ANTHROPIC_API_KEY` | Reserved for Phase 2 summarization crons. |
+| `DATA_DIR` | Phase B-2 baseline persistence directory. **Railway only** — set to `/data` and mount a volume at the same path. Unset locally → cron falls back to `os.tmpdir()`. Mirrors the Brain pattern. |
 
 ## Development
 
@@ -64,7 +65,7 @@ curl -s http://localhost:3100/health | jq
 
 ## Deployment
 
-Railway, auto-deploy on push to `main`. Volume not required for Phase 1 (no persisted state yet — cron results in Phase 2 will need one).
+Railway, auto-deploy on push to `main`. Phase B-2 added a Railway volume mounted at `/data` (configured in the Railway dashboard — Service → Settings → Volumes) for baseline persistence; set `DATA_DIR=/data` on the service so `src/cron.js` reads/writes `${DATA_DIR}/baselines.json` across redeploys.
 
 ## Portfolio framing
 

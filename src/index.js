@@ -35,6 +35,8 @@ app.get('/health', (_req, res) => {
       BRAIN_API_KEY_set:  !!process.env.BRAIN_API_KEY,
       ANTHROPIC_API_KEY_set: !!process.env.ANTHROPIC_API_KEY,  // required for run_self_test judge
       GROQ_API_KEY_set:   !!process.env.GROQ_API_KEY,          // required if generator/target uses Groq
+      DATA_DIR_set:       !!process.env.DATA_DIR,              // Phase B-2 baseline persistence
+      DATA_DIR_path:      process.env.DATA_DIR || '<unset>',   // path is config, not secret
     },
   });
 });

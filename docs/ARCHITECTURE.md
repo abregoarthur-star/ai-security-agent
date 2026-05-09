@@ -42,7 +42,7 @@ The tier separation mirrors enterprise orgs — a dedicated AI security team alo
 ai-security-agent/
 ├── src/
 │   ├── index.js                # Express app, auth gate, route wiring
-│   ├── cron.js                 # Daily self-scan schedule + in-memory baseline state
+│   ├── cron.js                 # Daily self-scan schedule + baseline state (persisted to /data/baselines.json — Phase B-2)
 │   ├── tools/                  # One handler per /tools/* endpoint
 │   │   ├── audit-mcp-server.js
 │   │   ├── diff-mcp-server.js
@@ -87,21 +87,23 @@ Managed by `src/cron.js::startSchedule()`, armed when Express starts listening.
 
 | Schedule | Trigger | Purpose |
 |---|---|---|
-| `0 3 * * *` | Daily 03:00 UTC | Fetch Brain's MCP manifests via `GET /security/mcp-manifests`, audit `brain-tools` + `brain-exec`, diff against the in-memory baseline. Critical drift → Telegram alert via Brain's `POST /telegram/send`. |
-| `+5s` after boot | One-shot | Establishes the baseline and proves the path end-to-end before the first cron fires. |
+| `0 3 * * *` | Daily 03:00 UTC | Fetch Brain's MCP manifests via `GET /security/mcp-manifests`, audit `brain-tools` + `brain-exec`, diff against the persisted baseline (`/data/baselines.json` — Phase B-2). Critical drift → Telegram alert via Brain's `POST /telegram/send`. |
+| `+5s` after boot | One-shot | Establishes the baseline and proves the path end-to-end before the first cron fires. After Phase B-2 the boot run hydrates from disk first, so drift survives redeploys. |
 
-The baseline is rebuilt on every scan (last good scan becomes the new baseline) so drift detection is always relative to the most recent clean state.
+The baseline is rebuilt on every scan (last good scan becomes the new baseline) so drift detection is always relative to the most recent clean state. As of Phase B-2 the map is persisted to `${DATA_DIR}/baselines.json` after every successful scan via an atomic temp-file + rename so a redeploy crash mid-write can't corrupt the file.
 
 ### State shape (`src/cron.js`)
 
 ```js
 {
-  baselines: Map<serverName, mcpAuditReport>,  // in-memory, Phase B-1
+  baselines: Map<serverName, mcpAuditReport>,  // persisted to ${DATA_DIR}/baselines.json — Phase B-2
   lastRun:   ISO8601 | null,
   lastScan:  { trigger, startedAt, servers[], diffs[] } | null,
   lastError: { at, message } | null,
 }
 ```
+
+`DATA_DIR` defaults to `/data` on Railway (volume mount) and falls back to `os.tmpdir()` in local dev — persistence is best-effort, the cron continues running even if reads/writes fail.
 
 ## Environment variables
 
@@ -112,6 +114,7 @@ The baseline is rebuilt on every scan (last good scan becomes the new baseline) 
 | `BRAIN_API_KEY` | Required for cron | Brain's API key for `/security/mcp-manifests`, `/security/firewall/events`, `/telegram/send`. |
 | `ANTHROPIC_API_KEY` | Required for `run_self_test` | prompt-eval judge model. |
 | `GROQ_API_KEY` | Required if Groq | Required when `run_self_test` uses Groq as generator or target. |
+| `DATA_DIR` | Railway only | Persistent baseline directory (Phase B-2). Set to `/data` on Railway with a volume mounted at the same path; unset locally so the cron falls back to `os.tmpdir()`. |
 | `PORT` | Auto | Railway assigns; defaults to 3100 in dev. |
 
 ## CI/CD + deployment automation
@@ -168,12 +171,12 @@ Each portfolio repo remains independently maintained and published to npm / GitH
 | **Phase 2** | complete | 2026-04-20 | `run_self_test` — prompt-genesis `selfTest()` orchestration with ship/hold decision |
 | **Phase B** | complete | 2026-04-20 | Daily self-scan cron (03:00 UTC + boot-run), in-memory baseline state, critical-drift Telegram alerts via Brain |
 | **Phase 3** | complete | 2026-04-22 | `capability_inventory`, `sweep_mcp_ecosystem`, `/intel/ai-security` Security Agent uplink |
-| **Phase B-2** | pending | — | Railway volume for baseline persistence across deploys |
+| **Phase B-2** | complete | 2026-04-19 | Baseline persistence to `${DATA_DIR}/baselines.json` via Railway volume — atomic temp+rename writes, hydrate-on-boot, graceful fallback to `os.tmpdir()` in local dev |
 | **Phase 3 follow-up** | pending | — | Full Security Agent integration: pull consumer wired into Security Agent's `src/intel.js` 5-min polling engine so `/intel/security` correlates CVE/bounty intel with AI-native posture |
 
 ## Known issues / deferred work
 
-- **Baseline persistence** — currently in-memory only (Phase B-1). A Railway restart or redeploy wipes baselines, so the first post-restart scan just establishes a new baseline rather than flagging drift. Phase B-2 adds a Railway volume for cross-deploy persistence.
+- **Baseline persistence** — Phase B-2 shipped 2026-04-19. Baselines persist to `${DATA_DIR}/baselines.json` (Railway volume mounted at `/data`). Atomic temp-file + rename writes on every successful scan, hydrate-on-boot from disk, graceful fallback to `os.tmpdir()` in local dev so test runs don't crash without the volume. The Railway volume must be created in the dashboard (Service → Settings → Volumes); the `railway.toml` carries a comment marker but Railway TOML doesn't natively declare volumes inline.
 - **Supabase JWT rotation** — deferred, see `INCIDENT-RESPONSE-2026-04-21.md` for the mitigation plan.
 - **Anthropic workspace migration** — scheduled week of 2026-04-27. Moves the fleet from a single master Anthropic API key to per-project scoped keys. `run_self_test` and any future Claude-calling tools here will need to be re-pointed at the new ai-security-agent-scoped key.
 - **Health endpoint disclosure** — `/health` is public and reveals `*_set` booleans for every configured env var. This is intentional (fleet diagnostics) but means anyone hitting the URL learns which integrations are wired. No secret values are exposed.

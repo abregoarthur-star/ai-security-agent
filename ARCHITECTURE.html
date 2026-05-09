@@ -912,7 +912,7 @@ p code, li code, td code {
     <div class="file-tree"><span class="dir">ai-security-agent/</span>
 ├── <span class="dir">src/</span>
 │   ├── <span class="file">index.js</span>                <span class="comment"># Express app, auth gate, route wiring</span>
-│   ├── <span class="file">cron.js</span>                 <span class="comment"># Daily self-scan + in-memory baseline state</span>
+│   ├── <span class="file">cron.js</span>                 <span class="comment"># Daily self-scan + baseline state persisted to ${DATA_DIR}/baselines.json (Phase B-2)</span>
 │   ├── <span class="dir">tools/</span>                  <span class="comment"># One handler per /tools/* endpoint</span>
 │   │   ├── <span class="file">audit-mcp-server.js</span>
 │   │   ├── <span class="file">diff-mcp-server.js</span>
@@ -1053,7 +1053,7 @@ p code, li code, td code {
         <div class="job-section-title">Flow</div>
         <div class="job-item">Fetch Brain's manifests via <code>GET /security/mcp-manifests</code></div>
         <div class="job-item">Audit <code>brain-tools</code> + <code>brain-exec</code> via mcp-audit</div>
-        <div class="job-item">Diff against in-memory baseline (last good scan)</div>
+        <div class="job-item">Diff against persisted baseline (<code>${DATA_DIR}/baselines.json</code>, last good scan)</div>
         <div class="job-item">Critical drift &rarr; Telegram via Brain's <code>POST /telegram/send</code></div>
         <div class="badges">
           <span class="badge purple">Daily</span>
@@ -1070,12 +1070,12 @@ p code, li code, td code {
       <div class="job-runner">+5s after app.listen()</div>
       <div class="job-body">
         <div class="job-section-title">Purpose</div>
-        <div class="job-item">Establishes the baseline on cold boot</div>
+        <div class="job-item">Hydrates baselines from <code>${DATA_DIR}/baselines.json</code> on module load (Phase B-2)</div>
+        <div class="job-item">Establishes the baseline on cold boot if no file exists</div>
         <div class="job-item">Proves the path end-to-end before cron fires</div>
-        <div class="job-item">First post-restart scan re-seeds baseline (Phase B-1)</div>
         <div class="badges">
           <span class="badge violet">Startup</span>
-          <span class="badge gray">In-memory only</span>
+          <span class="badge green">Persisted</span>
         </div>
       </div>
     </div>
@@ -1084,7 +1084,7 @@ p code, li code, td code {
   <div style="margin-top: 24px;">
     <div class="step-label">State Shape &mdash; src/cron.js</div>
     <div class="code-block" data-lang="javascript">{
-  <span class="k">baselines</span>: <span class="n">Map</span>&lt;serverName, mcpAuditReport&gt;,  <span class="c">// in-memory, Phase B-1</span>
+  <span class="k">baselines</span>: <span class="n">Map</span>&lt;serverName, mcpAuditReport&gt;,  <span class="c">// persisted to ${DATA_DIR}/baselines.json (Phase B-2)</span>
   <span class="k">lastRun</span>:   ISO8601 | <span class="k">null</span>,
   <span class="k">lastScan</span>:  { <span class="k">trigger</span>, <span class="k">startedAt</span>, <span class="k">servers</span>[], <span class="k">diffs</span>[] } | <span class="k">null</span>,
   <span class="k">lastError</span>: { <span class="k">at</span>, <span class="k">message</span> } | <span class="k">null</span>,
@@ -1111,6 +1111,7 @@ p code, li code, td code {
       <div class="env-chip required"><span class="key">BRAIN_API_KEY</span> <span class="val">= Brain's API key for manifests + telegram</span></div>
       <div class="env-chip required"><span class="key">ANTHROPIC_API_KEY</span> <span class="val">= prompt-eval judge (run_self_test)</span></div>
       <div class="env-chip optional"><span class="key">GROQ_API_KEY</span> <span class="val">= required if generator/target is Groq</span></div>
+      <div class="env-chip optional"><span class="key">DATA_DIR</span> <span class="val">= Railway only &middot; <code>/data</code> volume mount &middot; baseline persistence (Phase B-2)</span></div>
       <div class="env-chip optional"><span class="key">API_KEY</span> <span class="val">= legacy alias for AGENT_API_KEY</span></div>
       <div class="env-chip optional"><span class="key">PORT</span> <span class="val">= Railway auto-assigns &middot; dev defaults 3100</span></div>
     </div>
@@ -1348,7 +1349,7 @@ p code, li code, td code {
           <td data-label="Phase"><span class="phase pb">Phase B</span></td>
           <td data-label="Status"><span class="badge green">complete</span></td>
           <td data-label="Shipped"><span class="route">2026-04-20</span></td>
-          <td data-label="Scope">Daily self-scan cron (03:00 UTC + boot-run), in-memory baseline state, critical-drift Telegram alerts via Brain</td>
+          <td data-label="Scope">Daily self-scan cron (03:00 UTC + boot-run), baseline state (in-memory in B-1, persisted in B-2), critical-drift Telegram alerts via Brain</td>
         </tr>
         <tr>
           <td data-label="Phase"><span class="phase p3">Phase 3</span></td>
@@ -1358,9 +1359,9 @@ p code, li code, td code {
         </tr>
         <tr>
           <td data-label="Phase"><span class="phase pb">Phase B-2</span></td>
-          <td data-label="Status"><span class="badge gold">pending</span></td>
-          <td data-label="Shipped"><span class="route">&mdash;</span></td>
-          <td data-label="Scope">Railway volume for baseline persistence across deploys</td>
+          <td data-label="Status"><span class="badge green">complete</span></td>
+          <td data-label="Shipped"><span class="route">2026-04-19</span></td>
+          <td data-label="Scope">Baseline persistence to <code>${DATA_DIR}/baselines.json</code> via Railway volume &mdash; atomic temp+rename writes, hydrate-on-boot, graceful fallback to <code>os.tmpdir()</code> in local dev</td>
         </tr>
         <tr>
           <td data-label="Phase"><span class="phase p3">Phase 3 follow-up</span></td>
@@ -1383,17 +1384,17 @@ p code, li code, td code {
 
   <div class="jobs-2col">
 
-    <div class="job-box orange">
+    <div class="job-box green">
       <div class="job-header">
         <span class="job-icon">&#x1F4BE;</span>
         <span class="job-title">Baseline Persistence</span>
       </div>
       <div class="job-body">
-        <div class="job-item">Currently in-memory only (Phase B-1)</div>
-        <div class="job-item">Railway restart / redeploy wipes baselines</div>
-        <div class="job-item">First post-restart scan re-seeds rather than flagging drift</div>
-        <div class="job-item">Fix: Phase B-2 Railway volume mount</div>
-        <div class="badges"><span class="badge orange">Phase B-2</span></div>
+        <div class="job-item">Phase B-2 shipped 2026-04-19</div>
+        <div class="job-item">Persisted to <code>${DATA_DIR}/baselines.json</code> on Railway volume (mount path <code>/data</code>)</div>
+        <div class="job-item">Atomic temp-file + rename writes &middot; hydrate on boot</div>
+        <div class="job-item">Local dev falls back to <code>os.tmpdir()</code> &middot; failures log + continue</div>
+        <div class="badges"><span class="badge green">Shipped</span></div>
       </div>
     </div>
 

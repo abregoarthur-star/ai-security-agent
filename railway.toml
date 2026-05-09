@@ -7,3 +7,9 @@ healthcheckPath = "/health"
 healthcheckTimeout = 30
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 3
+
+# Phase B-2: persistent baseline storage for the daily MCP self-scan cron.
+# Railway TOML doesn't natively declare volumes — the volume must be created
+# in the Railway dashboard (Service → Settings → Volumes → New Volume) with
+# mount path = /data. The DATA_DIR env var (set on Railway only) tells
+# src/cron.js to read/write baselines.json there. See docs/ARCHITECTURE.md.

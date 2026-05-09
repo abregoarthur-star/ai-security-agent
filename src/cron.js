@@ -3,15 +3,29 @@
  *
  * 3am daily (and once on boot): fetch Brain's MCP manifests, audit each,
  * diff against the last-seen baseline. Critical drift → Telegram alert via
- * Brain's /telegram/send endpoint. Baseline is in-memory only (Phase B-1);
- * Phase B-2 adds a Railway volume for cross-deploy persistence.
+ * Brain's /telegram/send endpoint.
+ *
+ * Phase B-2: baselines now persist to ${DATA_DIR}/baselines.json (Railway
+ * volume mounted at /data). On boot we hydrate state.baselines from disk;
+ * after every successful scan we atomic-write back. Read/write failures log
+ * and continue — persistence is best-effort, the cron must keep running
+ * even when the volume is unavailable (local dev, volume not mounted, etc).
  */
 
 import cron from 'node-cron';
+import fs from 'node:fs';
+import fsp from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import { auditMcpServer } from './tools/audit-mcp-server.js';
 import { diffMcpServer } from './tools/diff-mcp-server.js';
 
-// In-memory baseline + last-scan state (Phase B-1 — no persistence yet)
+// Persistence config — Railway sets DATA_DIR=/data; locally we fall back to
+// os.tmpdir() so tests + dev runs don't crash trying to touch /data.
+const DATA_DIR = process.env.DATA_DIR || (fs.existsSync('/data') ? '/data' : os.tmpdir());
+const BASELINE_FILE = path.join(DATA_DIR, 'baselines.json');
+
+// In-memory baseline + last-scan state, hydrated from disk on boot (Phase B-2)
 const state = {
   baselines: new Map(),   // server name → last-seen mcp-audit report
   lastRun: null,          // timestamp
@@ -19,12 +33,57 @@ const state = {
   lastError: null,
 };
 
+// Load baselines synchronously on module load so the boot scan sees them.
+function hydrateBaselines() {
+  try {
+    if (!fs.existsSync(BASELINE_FILE)) {
+      console.log(`[ai-sec-agent] no baseline file found — cold start (looked at ${BASELINE_FILE})`);
+      return;
+    }
+    const raw = fs.readFileSync(BASELINE_FILE, 'utf8');
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object' && parsed.baselines && typeof parsed.baselines === 'object') {
+      for (const [name, report] of Object.entries(parsed.baselines)) {
+        state.baselines.set(name, report);
+      }
+      console.log(`[ai-sec-agent] hydrated ${state.baselines.size} baseline(s) from ${BASELINE_FILE} (savedAt=${parsed.savedAt || 'unknown'})`);
+    } else {
+      console.warn(`[ai-sec-agent] baseline file ${BASELINE_FILE} has unexpected shape — ignoring`);
+    }
+  } catch (err) {
+    console.error(`[ai-sec-agent] failed to read baselines from ${BASELINE_FILE}: ${err.message} — continuing with empty map`);
+  }
+}
+
+hydrateBaselines();
+
+// Atomic write: temp file + rename, so a crash mid-write can't corrupt the
+// baseline file. Errors log and return; persistence is best-effort.
+async function persistBaselines() {
+  const payload = {
+    savedAt: new Date().toISOString(),
+    baselines: Object.fromEntries(state.baselines),
+  };
+  const tmpFile = `${BASELINE_FILE}.${process.pid}.${Date.now()}.tmp`;
+  try {
+    await fsp.mkdir(DATA_DIR, { recursive: true });
+    await fsp.writeFile(tmpFile, JSON.stringify(payload), 'utf8');
+    await fsp.rename(tmpFile, BASELINE_FILE);
+    console.log(`[ai-sec-agent] persisted ${state.baselines.size} baseline(s) → ${BASELINE_FILE}`);
+  } catch (err) {
+    console.error(`[ai-sec-agent] failed to persist baselines to ${BASELINE_FILE}: ${err.message} — continuing`);
+    // Best-effort cleanup of temp file; ignore failure.
+    try { await fsp.unlink(tmpFile); } catch { /* noop */ }
+  }
+}
+
 export function getLastScan() {
   return {
     lastRun: state.lastRun,
     lastScan: state.lastScan,
     lastError: state.lastError,
     baselineCount: state.baselines.size,
+    baselineFile: BASELINE_FILE,
   };
 }
 
@@ -115,6 +174,11 @@ export async function runSelfScan({ trigger = 'cron' } = {}) {
     state.lastScan = { trigger, startedAt, servers: summaries, diffs: diffSummaries };
     state.lastError = null;
     console.log(`[ai-sec-agent] self-scan complete: ${JSON.stringify(summaries)}`);
+
+    // Phase B-2: persist after every successful scan so a redeploy can
+    // hydrate the next boot. Failures log + continue (see persistBaselines).
+    await persistBaselines();
+
     return state.lastScan;
 
   } catch (err) {
@@ -129,5 +193,5 @@ export function startSchedule() {
   cron.schedule('0 3 * * *', () => runSelfScan({ trigger: 'cron-daily' }));
   // Run once on boot to establish baseline and prove the path
   setTimeout(() => runSelfScan({ trigger: 'boot' }), 5_000);
-  console.log('[ai-sec-agent] self-scan schedule armed (daily 03:00 UTC, + boot run in 5s)');
+  console.log(`[ai-sec-agent] self-scan schedule armed (daily 03:00 UTC, + boot run in 5s) · baseline file: ${BASELINE_FILE}`);
 }
