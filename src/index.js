@@ -1,5 +1,6 @@
 import express from 'express';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { auditMcpServer } from './tools/audit-mcp-server.js';
 import { diffMcpServer } from './tools/diff-mcp-server.js';
@@ -29,8 +30,8 @@ app.get('/health', (_req, res) => {
     uptime: process.uptime(),
     tools: ['audit_mcp_server', 'diff_mcp_server', 'firewall_recent_events', 'run_self_test', 'capability_inventory', 'sweep_mcp_ecosystem'],
     env: {
-      AGENT_API_KEY_set:  !!(process.env.AGENT_API_KEY || process.env.API_KEY),
-      AGENT_API_KEY_len:  (process.env.AGENT_API_KEY || process.env.API_KEY || '').length,
+      AGENT_KEYS_callers: Object.keys(AGENT_KEYS),   // configured caller names, not secrets
+      legacy_key_set:     !!(process.env.AGENT_API_KEY || process.env.API_KEY),
       BRAIN_API_URL_set:  !!process.env.BRAIN_API_URL,
       BRAIN_API_KEY_set:  !!process.env.BRAIN_API_KEY,
       ANTHROPIC_API_KEY_set: !!process.env.ANTHROPIC_API_KEY,  // required for run_self_test judge
@@ -41,12 +42,45 @@ app.get('/health', (_req, res) => {
   });
 });
 
-// ─── Auth (shared key with Brain/Security Agent) ─────────────
+// ─── Auth: per-caller API keys ───────────────────────────────
+// AGENT_API_KEYS = "brain:<key>,security-agent:<key>" — each caller gets its
+// own key, so keys can be rotated/revoked independently and every request is
+// attributable (req.caller + audit log). Legacy single AGENT_API_KEY/API_KEY
+// still works (as caller "legacy") for zero-downtime migration. Comparison is
+// constant-time to avoid leaking key material via response timing.
+function loadAgentKeys() {
+  const keys = {};
+  for (const pair of (process.env.AGENT_API_KEYS || '').split(',')) {
+    const i = pair.indexOf(':');
+    if (i > 0) {
+      const name = pair.slice(0, i).trim();
+      const key  = pair.slice(i + 1).trim();
+      if (name && key) keys[name] = key;
+    }
+  }
+  const legacy = process.env.AGENT_API_KEY || process.env.API_KEY;
+  if (legacy) keys.legacy = legacy;
+  return keys;
+}
+const AGENT_KEYS = loadAgentKeys();
+
+function safeEqual(a, b) {
+  const ba = Buffer.from(String(a), 'utf8');
+  const bb = Buffer.from(String(b), 'utf8');
+  return ba.length === bb.length && crypto.timingSafeEqual(ba, bb);
+}
+
 function requireApiKey(req, res, next) {
-  const expected = process.env.AGENT_API_KEY || process.env.API_KEY;
-  if (!expected) return next();
+  // Fail-open ONLY if no keys are configured at all (dev) — warn loudly.
+  if (Object.keys(AGENT_KEYS).length === 0) {
+    console.warn('[auth] no AGENT_API_KEYS/AGENT_API_KEY configured — endpoint is UNAUTHENTICATED');
+    return next();
+  }
   const got = req.header('x-api-key');
-  if (got !== expected) return res.status(401).json({ error: 'unauthorized' });
+  const caller = got && Object.keys(AGENT_KEYS).find(name => safeEqual(AGENT_KEYS[name], got));
+  if (!caller) return res.status(401).json({ error: 'unauthorized' });
+  req.caller = caller;
+  console.log(`[auth] ${caller} → ${req.method} ${req.path}`);
   next();
 }
 
