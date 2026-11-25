@@ -43,8 +43,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # Fails the job on any high or critical advisory. The moderate one left
-      # (@anthropic-ai/sdk via prompt-genesis) needs a prompt-genesis release.
+      # Fails the job on any high or critical advisory.
       - name: npm audit (root)
         run: npm audit --audit-level=high
 

@@ -180,12 +180,11 @@ export function serializeInline(data, label = 'manifestData') {
 // ── run_self_test ────────────────────────────────────────────────────────────
 
 /**
- * Refuse a generator or judge model a caller named that is not on the list
- * ("groq:<id>" is matched on <id>). A request that names no model gets the
- * server's own default and is not checked: the caller did not choose it.
+ * Refuse a generator or judge model that is not on the list ("groq:<id>" is
+ * matched on <id>). The model a run will really use is what gets checked,
+ * whether the caller named it or it is the built-in default.
  */
 export function assertModelAllowed(model, role, env = process.env) {
-  if (model === undefined || model === null || model === '') return;
   const list = limits(env).selfTestModels;
   const id = typeof model === 'string' && model.includes(':') ? model.split(':').slice(1).join(':') : model;
   if (typeof model !== 'string' || !list.includes(id)) {

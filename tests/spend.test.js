@@ -13,8 +13,9 @@ const INPUT = {
 };
 
 /** What prompt-genesis selfTest() returns, reduced to the parts the ledger reads. */
-const result = (tdUsd, nmUsd) => ({
+const result = (tdUsd, nmUsd, evaluation = { costUsd: 0, targetUsd: 0, judgeUsd: 0, targetCalls: 7, judgeCalls: 7 }) => ({
   decision: 'HOLD',
+  evaluation,
   generation: {
     td: { attacks: 3, rejects: 1, costUsd: tdUsd, stoppedBy: 'count' },
     nm: { attacks: 3, rejects: 0, costUsd: nmUsd, stoppedBy: 'count' },
@@ -34,9 +35,11 @@ function setup(t, { env = {}, start = '2026-11-24T10:00:00Z' } = {}) {
 }
 
 test('a run is recorded: who, what, models, rounds, cost and call counts', async (t) => {
-  const { make, run, file } = setup(t);
+  const { make, run, file, setNext } = setup(t);
   const ledger = make();
-  const out = await run(ledger, { rounds: 5, generatorModel: 'claude-sonnet-5-5' });
+  const evaluation = { costUsd: 0.05, targetUsd: 0.03, judgeUsd: 0.02, targetCalls: 7, judgeCalls: 7 };
+  setNext(() => result(0.4, 0.3, evaluation));
+  const out = await run(ledger, { rounds: 5, generatorModel: 'groq:llama-3.1-8b-instant' });
   assert.equal(out.decision, 'HOLD', 'the result is passed through untouched');
 
   const s = ledger.summary();
@@ -45,18 +48,22 @@ test('a run is recorded: who, what, models, rounds, cost and call counts', async
     at: '2026-11-24T10:00:00.000Z',
     caller: 'brain',
     target: { kind: 'anthropic', model: 'claude-x' },
-    generatorModel: 'claude-sonnet-5-5',
-    judgeModel: 'claude-haiku-4-5',
+    generatorModel: 'groq:llama-3.1-8b-instant',
+    judgeModel: 'claude-haiku-5-5',
     rounds: 5,
     maxUsd: 3,
     ok: true,
-    usd: 0.7,
+    usd: 0.75,
+    generationUsd: 0.7,
+    evaluationUsd: 0.05,
+    evaluation,
     generation: { td: { attacks: 3, rejects: 1, costUsd: 0.4, stoppedBy: 'count' }, nm: { attacks: 3, rejects: 0, costUsd: 0.3, stoppedBy: 'count' } },
     evalCalls: 7,
     decision: 'HOLD',
   });
-  assert.deepEqual(s.today, { date: '2026-11-24', usd: 0.7, runs: 1, evalCalls: 7, capUsd: 3, remainingUsd: 2.3, inFlightUsd: 0 });
-  assert.deepEqual(s.days, [{ date: '2026-11-24', usd: 0.7, runs: 1, evalCalls: 7 }]);
+  assert.deepEqual(s.today, { date: '2026-11-24', usd: 0.75, runs: 1, evalCalls: 7, capUsd: 3, remainingUsd: 2.25, inFlightUsd: 0 });
+  assert.deepEqual(s.days, [{ date: '2026-11-24', usd: 0.75, runs: 1, evalCalls: 7 }], 'generation and evaluation both count toward the day');
+  assert.match(s.note, /generationUsd \+ evaluationUsd/);
   const onDisk = fs.readFileSync(file, 'utf8');
   assert.ok(!onDisk.includes('a long private prompt'), 'the target system prompt is not stored');
   assert.ok(!onDisk.includes('"seedCorpus"'));
@@ -165,13 +172,14 @@ test('generator and judge models: only allowlisted ones may be named', async (t)
     {},                                                    // names none: the server's own defaults
   ]) await run(ledger, extra);
   assert.equal(calls.length, 5);
-  assert.deepEqual([calls[4].generatorModel, calls[4].judgeModel], ['claude-sonnet-4-6', 'claude-haiku-4-5'], 'built-in defaults are unchanged');
+  assert.deepEqual([calls[4].generatorModel, calls[4].judgeModel], ['claude-sonnet-5-5', 'claude-haiku-5-5'], 'the built-in defaults are on the list');
 
   for (const extra of [
     { generatorModel: 'claude-opus-5-5' },
     { generatorModel: 'claude-opus-4-7' },
     { judgeModel: 'claude-opus-5-5' },
-    { generatorModel: 'claude-sonnet-4-6' },               // not on the list when a caller names it
+    { generatorModel: 'claude-sonnet-4-6' },
+    { judgeModel: 'claude-haiku-4-5' },
     { generatorModel: 'groq:claude-opus-5-5' },
     { generatorModel: 'evil:claude-sonnet-5-5:extra' },
     { generatorModel: { id: 'claude-sonnet-5-5' } },
@@ -189,7 +197,34 @@ test('the model allowlist comes from SELF_TEST_MODEL_ALLOWLIST when set', async 
   const ledger = make();
   await run(ledger, { generatorModel: 'claude-opus-5-5', judgeModel: 'my-model' });
   await assert.rejects(run(ledger, { generatorModel: 'claude-sonnet-5-5' }), notAllowed);
+  // The built-in defaults are held to the list as well: naming no model is not a way round it.
+  await assert.rejects(run(ledger), notAllowed);
+  await assert.rejects(run(ledger, { generatorModel: 'claude-opus-5-5' }), (e) => notAllowed(e) && /judgeModel "claude-haiku-5-5"/.test(e.message));
   assert.equal(calls.length, 1);
+});
+
+test('evaluation cost counts toward the cap for the next run; a target that reports none adds nothing', async (t) => {
+  const { make, run, setNext, calls } = setup(t);
+  const ledger = make();
+  const small = { maxCostUsdPerGen: 0.7 };                // reserves 1.40 per run
+  setNext(() => result(0.7, 0.7, { costUsd: 0.25, targetUsd: 0.2, judgeUsd: 0.05, targetCalls: 61, judgeCalls: 61 }));
+  await run(ledger, small);                               // 1.40 generation + 0.25 evaluation
+  assert.equal(ledger.today().usd, 1.65);
+  // 1.65 + 1.40 > 3.00: without the evaluation cost (1.40 + 1.40) this would have fitted.
+  await assert.rejects(run(ledger, small), (e) => e.code === 'daily_cap' && /\$1\.65/.test(e.message));
+
+  // http / brain / groq / together targets: prompt-genesis reports 0 for them.
+  setNext(() => result(0.1, 0.1, { costUsd: 0, targetUsd: 0, judgeUsd: 0, targetCalls: 0, judgeCalls: 0 }));
+  await run(ledger, { maxCostUsdPerGen: 0.5, target: { kind: 'http', url: 'https://example.com/chat' } });
+  const [latest] = ledger.summary().runs;
+  assert.deepEqual([latest.generationUsd, latest.evaluationUsd, latest.usd], [0.2, 0, 0.2]);
+  assert.equal(ledger.today().usd, 1.85);
+
+  // A result with no evaluation block at all (an older prompt-genesis) is generation only.
+  setNext(() => { const r = result(0.1, 0.1); delete r.evaluation; return r; });
+  await run(ledger, { maxCostUsdPerGen: 0.5 });
+  assert.deepEqual([ledger.summary().runs[0].evaluationUsd, ledger.summary().runs[0].evaluation], [0, null]);
+  assert.equal(calls.length, 3);
 });
 
 test('over HTTP: the caller is recorded, the ledger and today\'s spend are behind a key, a capped run is 429', async (t) => {

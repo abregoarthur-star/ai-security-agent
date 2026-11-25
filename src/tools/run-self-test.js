@@ -1,7 +1,7 @@
 /**
  * Phase 2 — run_self_test
  *
- * Wraps prompt-genesis@0.3.0's `selfTest()` export. Return shape mirrors
+ * Wraps prompt-genesis's `selfTest()` export. Return shape mirrors
  * the frozen contract 1:1 (see project_ai_security_agent.md memory).
  *
  * Each run spends real money on model calls, so the two inputs that set the
@@ -30,8 +30,10 @@ export async function runSelfTest(input, ctx = {}) {
   if (!Array.isArray(seedCorpus) || seedCorpus.length === 0) {
     throw badRequest('runSelfTest: seedCorpus must be a non-empty array');
   }
-  assertModelAllowed(generatorModel, 'generatorModel', env);
-  assertModelAllowed(judgeModel, 'judgeModel', env);
+  // The models the run will use, named or default, must be on the allowlist.
+  const models = { generatorModel: generatorModel || 'claude-sonnet-5-5', judgeModel: judgeModel || 'claude-haiku-5-5' };
+  assertModelAllowed(models.generatorModel, 'generatorModel', env);
+  assertModelAllowed(models.judgeModel, 'judgeModel', env);
   if (URL_TARGET_KINDS.has(target.kind)) {
     if (typeof target.url !== 'string') throw badRequest(`runSelfTest: target.url is required for kind "${target.kind}"`);
     await (ctx.guard || defaultUrlGuard()).assertPublicUrl(target.url);
@@ -47,8 +49,7 @@ export async function runSelfTest(input, ctx = {}) {
     target,
     seedCorpus,
     rounds:         capped.rounds,
-    generatorModel: generatorModel || 'claude-sonnet-4-6',
-    judgeModel:     judgeModel || 'claude-haiku-4-5',
+    ...models,
     maxCostUsdPerGen: capped.maxCostUsdPerGen,
   };
   return await ctx.ledger.charge({ ...run, caller: ctx.caller }, () => (ctx.selfTest || selfTest)(run));

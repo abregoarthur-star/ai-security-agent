@@ -3,10 +3,12 @@
  * costs money. Every run is recorded, and a daily dollar cap across all
  * runs is enforced before a run starts.
  *
- * What a run can cost is known only in part: prompt-genesis caps and
- * reports the two generation passes (maxCostUsdPerGen each) and nothing
- * else, so "cost" here is generation cost. The evaluation calls (one target
- * call and one judge call per attack) are counted, not priced.
+ * Cost is what prompt-genesis reports for the run: the two generation
+ * passes (each capped at maxCostUsdPerGen) and the evaluation calls (target
+ * and judge; a target that reports no token usage contributes 0). Both are
+ * recorded and both count toward the day. Only generation has a hard limit,
+ * so the worst case reserved before a run is 2 × maxCostUsdPerGen; evaluation
+ * on the allowlisted models is cents and is added when the run reports it.
  *
  * Days are UTC. The ledger keeps 30 days.
  */
@@ -69,10 +71,15 @@ export function createSpendLedger({
       const gen = result?.generation || {};
       const reports = result?.reports || {};
       const count = (report) => (Array.isArray(report?.results) ? report.results.length : 0);
+      const generationUsd = round((Number(gen.td?.costUsd) || 0) + (Number(gen.nm?.costUsd) || 0));
+      const evaluationUsd = round(Number(result?.evaluation?.costUsd) || 0);
       Object.assign(entry, {
         ok: true,
-        usd: round((Number(gen.td?.costUsd) || 0) + (Number(gen.nm?.costUsd) || 0)),
+        usd: round(generationUsd + evaluationUsd),   // what the day's total and the cap count
+        generationUsd,
+        evaluationUsd,
         generation: { td: gen.td ?? null, nm: gen.nm ?? null },
+        evaluation: result?.evaluation ?? null,
         evalCalls: count(reports.baseline) + count(reports.tdEval) + count(reports.nmEval),
         decision: result?.decision ?? null,
       });
@@ -104,7 +111,7 @@ export function createSpendLedger({
     prune();
     return {
       today: today(),
-      note: 'usd is generation cost as reported by prompt-genesis; evaluation and judge calls are counted (evalCalls) but not priced. A failed run is counted at its maximum.',
+      note: 'usd = generationUsd + evaluationUsd, both as reported by prompt-genesis. Evaluation covers target and judge calls billed to this service; a target that reports no token usage (http, brain, groq, together) contributes 0. Before a run the cap reserves 2 × maxCostUsdPerGen (generation only), so evaluation can take a day slightly past the cap. A failed run is counted at that reserved maximum. Runs recorded before prompt-genesis 0.4.0 carry generation cost only.',
       days: Object.keys(days).sort().reverse().map((date) => ({ date, ...days[date] })),
       runs: [...runs].reverse(),
       file: file.file,
