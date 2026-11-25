@@ -23,7 +23,7 @@ const SCHEMA_VERSION = '1.0.0';
 
 /**
  * Aggregate per-server summaries produced by cron.js::summarizeReport().
- * Each summary has shape: { name, tools, findings, bySeverity, criticals }
+ * Each summary has shape: { name, tools, findings, bySeverity, criticals, highs }
  */
 function aggregateScan(lastScan) {
   const servers = Array.isArray(lastScan?.servers) ? lastScan.servers : [];
@@ -69,7 +69,7 @@ function extractHighPriority(servers) {
         title,
       });
     }
-    // Soft-support a future `highs` field without breaking if absent.
+    // Scans stored before `highs` was emitted do not have it.
     const highs = Array.isArray(s.highs) ? s.highs : [];
     for (const entry of highs) {
       const idx = typeof entry === 'string' ? entry.indexOf(':') : -1;
@@ -149,9 +149,8 @@ async function fetchFirewallEventCount() {
  * Build the full AI-security intel snapshot.
  * Pure function of cron state + (best-effort) Brain firewall pull. No writes.
  */
-export async function getAiSecurityIntel({ includeFirewall = true } = {}) {
+export async function getAiSecurityIntel({ includeFirewall = true, scan = getLastScan() } = {}) {
   const asOf = new Date().toISOString();
-  const scan = getLastScan();
 
   // Cold boot — no scan has landed yet (boot-run fires 5s after listen).
   if (!scan || !scan.lastRun) {

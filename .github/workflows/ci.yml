@@ -43,8 +43,28 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Fails the job on any high or critical advisory. The moderate one left
+      # (@anthropic-ai/sdk via prompt-genesis) needs a prompt-genesis release.
       - name: npm audit (root)
-        run: npm audit --audit-level=high || echo "::warning::npm audit found vulnerabilities"
+        run: npm audit --audit-level=high
+
+  test:
+    name: Tests
+    needs: secrets-gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests (node:test, no network)
+        run: npm test
 
   syntax-check:
     name: Syntax Validation
@@ -62,7 +82,12 @@ jobs:
         run: |
           echo "Checking source files..."
           node --check src/index.js
+          node --check src/app.js
           node --check src/cron.js
+          for f in src/lib/*.js; do
+            echo "  ✓ $f"
+            node --check "$f"
+          done
           for f in src/routes/*.js; do
             echo "  ✓ $f"
             node --check "$f"
@@ -75,12 +100,27 @@ jobs:
 
   smoke-test:
     name: Post-Deploy Smoke Test
-    needs: [security-audit, syntax-check]
+    needs: [security-audit, syntax-check, test]
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
+      # Wait until the service answers three times in a row rather than for a
+      # fixed time: a fixed wait can land on Railway's container swap.
       - name: Wait for Railway deploy
-        run: sleep 60
+        env:
+          BASE_URL: https://ai-security-agent-production.up.railway.app
+        run: |
+          sleep 45
+          ok=0
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 8 "$BASE_URL/health" || true)
+            if [ "$code" = "200" ]; then ok=$((ok + 1)); else ok=0; fi
+            echo "health check $i: ${code:-no answer} (in a row: $ok)"
+            if [ "$ok" -ge 3 ]; then exit 0; fi
+            sleep 6
+          done
+          echo "::error::/health did not answer three times in a row within about 4 minutes"
+          exit 1
 
       - name: Smoke test production endpoints
         env:
@@ -96,11 +136,17 @@ jobs:
             local expected="$4"
             local body="$5"
 
-            if [ "$method" = "POST" ]; then
-              status=$(curl -s -o /dev/null -w "%{http_code}" -X POST -H "Content-Type: application/json" -d "$body" "$url" --max-time 15)
-            else
-              status=$(curl -s -o /dev/null -w "%{http_code}" "$url" --max-time 15)
-            fi
+            # Up to 4 tries: a timeout or a wrong answer during a container swap is retried,
+            # and a curl failure does not end the script before it can report.
+            for attempt in 1 2 3 4; do
+              if [ "$method" = "POST" ]; then
+                status=$(curl -s -o /dev/null -w "%{http_code}" -X POST -H "Content-Type: application/json" -d "$body" "$url" --max-time 15 || true)
+              else
+                status=$(curl -s -o /dev/null -w "%{http_code}" "$url" --max-time 15 || true)
+              fi
+              if [ "$status" = "$expected" ]; then break; fi
+              if [ "$attempt" -lt 4 ]; then sleep 10; fi
+            done
 
             if [ "$status" = "$expected" ]; then
               echo "✅ $name → $status (expected $expected)"
@@ -118,7 +164,7 @@ jobs:
           check "GET /health" GET "$BASE_URL/health" "200"
 
           # Verify /health response includes all expected tools.
-          tools_json=$(curl -s "$BASE_URL/health" --max-time 15)
+          tools_json=$(curl -s "$BASE_URL/health" --max-time 15 || true)
           for tool in audit_mcp_server diff_mcp_server firewall_recent_events run_self_test capability_inventory sweep_mcp_ecosystem; do
             if echo "$tools_json" | grep -q "\"$tool\""; then
               echo "✅ /health advertises $tool"
@@ -132,8 +178,31 @@ jobs:
           # Public architecture page — should be 200 (no auth required)
           check "GET /architecture" GET "$BASE_URL/architecture" "200"
 
-          # Tools endpoints without API key — should 401
+          # /health is public, so it must not describe the configuration.
+          # Retried for up to ~4 minutes: the container from before a deploy can
+          # still be the one answering, and an older build did list this detail.
+          clean=0
+          for i in $(seq 1 24); do
+            health_json=$(curl -s "$BASE_URL/health" --max-time 15 || true)
+            if [ -n "$health_json" ] && ! echo "$health_json" | grep -Eq 'AGENT_KEYS_callers|legacy_key_set|_set"|DATA_DIR'; then
+              clean=1
+              break
+            fi
+            sleep 10
+          done
+          if [ "$clean" = "1" ]; then
+            echo "✅ /health carries no configuration detail"
+            PASS=$((PASS + 1))
+          else
+            echo "❌ /health exposes configuration detail"
+            FAIL=$((FAIL + 1))
+          fi
+
+          # Protected routes without an API key — should 401.
+          # (503 here would mean no key is configured on the service at all.)
           check "POST /tools/audit_mcp_server (no auth)" POST "$BASE_URL/tools/audit_mcp_server" "401" '{}'
+          check "GET /ai-security/config (no auth)" GET "$BASE_URL/ai-security/config" "401"
+          check "GET /intel/ai-security (no auth)" GET "$BASE_URL/intel/ai-security" "401"
 
           echo ""
           echo "═══ Results: $PASS passed, $FAIL failed ═══"

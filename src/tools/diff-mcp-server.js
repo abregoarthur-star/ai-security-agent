@@ -1,13 +1,22 @@
 import { diff } from '@dj_abstract/mcp-audit';
+import { badRequest } from '../lib/errors.js';
+import { resolveInsideRoot, serializeInline } from '../lib/policy.js';
 
 /**
  * Diff two mcp-audit reports to detect rug-pulls and capability drift.
- * Accepts { baseline, current } as either file paths or parsed report objects.
+ * Accepts { baseline, current }, each either a parsed report object (the
+ * normal mode) or the path of a report file inside MANIFEST_ROOT.
  */
-export async function diffMcpServer({ baseline, current }) {
+export async function diffMcpServer(input, ctx = {}) {
+  const env = ctx.env || process.env;
+  const { baseline, current } = input || {};
   if (!baseline || !current) {
-    throw new Error('diffMcpServer: requires {baseline, current}');
+    throw badRequest('diffMcpServer: requires {baseline, current}');
   }
-  const result = await diff(baseline, current);
-  return result;
+  const side = async (value, label) => {
+    if (typeof value === 'string') return await resolveInsideRoot(value, env);
+    if (ctx.trusted !== true) serializeInline(value, label);
+    return value;
+  };
+  return await (ctx.diff || diff)(await side(baseline, 'baseline'), await side(current, 'current'));
 }

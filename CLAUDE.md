@@ -18,19 +18,45 @@ Separation of concerns mirrors real-world enterprises: a dedicated AI security t
 
 ## Stack
 
-Node.js 20 + Express (ESM). Deployed to Railway. Imports `@dj_abstract/mcp-audit` and `@dj_abstract/agent-firewall` as npm deps — no child_process.
+Node.js 22 + Express (ESM). Deployed to Railway (Dockerfile, `npm ci`). Imports `@dj_abstract/mcp-audit`, `@dj_abstract/agent-capability-inventory` and `@dj_abstract/prompt-genesis` as npm deps. `src/app.js` builds the Express app (`createApp`, no side effects — tests build their own); `src/index.js` only listens and starts the schedule. Shared rules live in `src/lib/`: `auth.js` (keys, capabilities), `policy.js` (stdio, paths, sizes, self-test caps), `url-guard.js` (caller-supplied URLs), `spend.js` (self-test ledger and daily cap), `store.js` (the one JSON-file store both the scan state and the ledger use), `data-dir.js`.
 
 ## Phase 1 routes
 
 | Method | Route | Purpose |
 |---|---|---|
-| `GET` | `/health` | Liveness probe. |
-| `POST` | `/tools/audit_mcp_server` | Run `mcp-audit` against `{ manifest | stdio | url }`. |
+| `GET` | `/health` | Liveness probe (public): service, version, status, uptime, tool names. No configuration detail. |
+| `POST` | `/ai-security/baselines/:name/reset` | Authenticated (`scan`). Drops one server's baseline when a diff keeps failing against it; recorded in scan state (`resets`) with the caller. The next scan stores a new baseline without a drift check. |
+| `GET` | `/ai-security/spend` | Authenticated. Self-test spend: today against the cap, 30 days of daily totals, each run. |
+| `GET` | `/ai-security/config` | Authenticated. Caller names, which env vars are set (yes/no), data dir, limits. Never a secret value. |
+| `POST` | `/tools/audit_mcp_server` | Run `mcp-audit` against `{ manifestData | manifest | url | stdio }` — see "What a caller can make the server do". |
 | `POST` | `/tools/diff_mcp_server` | Diff two mcp-audit reports for rug-pull detection. |
 | `POST` | `/tools/firewall_recent_events` | Fetch recent agent-firewall events from Brain. |
 | `GET` | `/ai-security/posture` | Aggregated state of tracked surfaces (Phase 2 will populate). |
 
-All `/tools/*` and `/ai-security/*` routes gated on `x-api-key` if `API_KEY` is set.
+All `/tools/*`, `/intel/*` and `/ai-security/*` routes need `x-api-key`. Callers come from `AGENT_API_KEYS` (`name:key,name:key`) plus `AGENT_API_KEY` / `API_KEY` as caller `legacy`. **With no key configured every one of these routes answers 503, in every environment** — set a key to develop locally. Wrong or missing key → 401. Each request logs the caller name.
+
+## What a caller can make the server do
+
+A valid key is not full trust (`src/lib/policy.js`, `src/lib/url-guard.js`). A refusal is a 403 with a `code`.
+
+- **`manifestData` (inline)** — the normal mode. Limited to 1 MB each, 50 per sweep or inventory call (constants in `policy.js`).
+- **`stdio`** — runs a command on this server. Off unless `ALLOW_STDIO_AUDIT=1`, and then only for a complete command line listed in `STDIO_ALLOWLIST` (comma-separated; the whole line must match — a command name alone would allow `node -e …`). The spawned process inherits this service's environment (that is mcp-audit's behaviour), so list only commands you trust with its secrets.
+- **File paths** (`manifest`, `baselinesDir`, string `baseline`/`current` in a diff, inventory paths) — only inside `MANIFEST_ROOT` (default `<data dir>/manifests`), checked after resolving symlinks. Relative paths are taken from that root; `~` is not expanded.
+- **`url`** (and a self-test `target.url`) — http(s) only, public addresses only: loopback, RFC 1918, link-local (169.254.169.254 included), CGNAT, IPv6 loopback / unique-local / link-local and IPv4-mapped forms are refused. For audits the check is repeated when the connection is made and on every redirect, and the whole audit has a 30-second deadline. Requests to the configured `BRAIN_API_URL` are not subject to this.
+- **`run_self_test`** — `rounds` and `maxCostUsdPerGen` are capped by `SELF_TEST_MAX_ROUNDS` / `SELF_TEST_MAX_COST_USD_PER_GEN`; a caller may lower them, never raise them. A caller may name a `generatorModel` / `judgeModel` only from `SELF_TEST_MODEL_ALLOWLIST` (400 `model_not_allowed`); a request that names none gets the built-in defaults. On top of that a **daily cap** (`SELF_TEST_DAILY_CAP_USD`, UTC day): a run is refused (429, `daily_cap`) when today's recorded spend plus runs in flight plus this run's maximum (2 × `maxCostUsdPerGen`) would pass it. With the default $3.00 cap that is one default-size run a day.
+- **Capabilities** — `CALLER_CAPABILITIES` (`name=cap|cap,name=*`) narrows a caller to named capabilities: the six tool names, `intel`, `posture`, `scan`, `admin`. A caller not listed may use everything.
+
+## Spend ledger (`src/lib/spend.js`)
+
+`run_self_test` is the only thing here that costs money. Every run is recorded in `<data dir>/self-test-spend.json`: time, caller, target kind and model, generator and judge models, rounds, cost, call counts; plus daily totals for 30 days. Read it at `GET /ai-security/spend`; today's figure is also in `GET /ai-security/config`. **The dollar figure is generation cost only** — that is all prompt-genesis caps and reports today. Evaluation and judge calls are counted (`evalCalls`), not priced; the model allowlist and the rounds cap are what bound them. A run that fails is counted at its maximum, because what it spent is unknown. Without a volume the ledger, and so the daily cap's memory, resets on every redeploy.
+
+## Daily self-scan (`src/cron.js`)
+
+03:00 UTC and once on boot. State — baselines, last scan, last error, which errors were already alerted — is in `<data dir>/baselines.json` and survives a restart when the data dir does. A server whose audit or diff fails keeps its old baseline; the error is in `lastScan.errors` / `lastError` and goes to Telegram **once per distinct error** (again if it recurs after a clean run). A scan that fails outright alerts the same way. A Telegram send that fails is recorded (`alerting.last`, `lastScan.alerts`) and retried on the next run; an undelivered critical-drift alert keeps the old baseline so the drift is found again. `createScanner()` takes its fetch, audit, diff and data dir as arguments for tests.
+
+## Tests
+
+`npm test` — node:test, no network (loopback servers only), no model calls. CI runs it, and `npm audit --audit-level=high` fails the job.
 
 ## Phase 2 — MCP transport
 
@@ -49,23 +75,35 @@ Expose the same tools as an MCP server over Streamable HTTP at `/mcp` using `@mo
 | Var | Purpose |
 |---|---|
 | `PORT` | HTTP listen port (Railway assigns). |
-| `API_KEY` | Shared key for Brain + Security Agent to call `/tools/*`. If unset, auth is disabled (dev only). |
+| `AGENT_API_KEYS` | Per-caller keys, `brain:<key>,security-agent:<key>`. |
+| `AGENT_API_KEY` / `API_KEY` | One shared key, caller `legacy`. With neither this nor `AGENT_API_KEYS`, protected routes answer 503. |
+| `CALLER_CAPABILITIES` | Optional. `name=cap|cap,…`; unlisted callers may use everything. |
+| `MANIFEST_ROOT` | Directory callers may name files in. Default `<data dir>/manifests`. |
+| `ALLOW_STDIO_AUDIT`, `STDIO_ALLOWLIST` | `1` plus a comma-separated list of complete command lines. Default: stdio audits off. |
+| `SELF_TEST_MAX_ROUNDS`, `SELF_TEST_MAX_COST_USD_PER_GEN` | Server-side caps for `run_self_test`. Defaults 30 and 1.50. |
+| `SELF_TEST_DAILY_CAP_USD` | Daily dollar cap across all `run_self_test` runs. Default 3.00. |
+| `SELF_TEST_MODEL_ALLOWLIST` | Comma-separated generator / judge models a caller may name. Default `claude-sonnet-5-5`, `claude-haiku-5-5`, `llama-3.3-70b-versatile`, `llama-3.1-8b-instant`, `meta-llama/llama-4-scout-17b-16e-instruct`. |
 | `BRAIN_API_URL` | Brain prod URL — used by `firewallRecentEvents`. |
 | `BRAIN_API_KEY` | Brain's API key for `/security/firewall/events`. |
 | `ANTHROPIC_API_KEY` | Reserved for Phase 2 summarization crons. |
-| `DATA_DIR` | Phase B-2 baseline persistence directory. **Railway only** — set to `/data` and mount a volume at the same path. Unset locally → cron falls back to `os.tmpdir()`. Mirrors the Brain pattern. |
+| `DATA_DIR` | Persistence directory (baselines + scan state). **Railway only** — set to `/data` and mount a volume at the same path. Unset → `/data` if it exists, else `os.tmpdir()`. Mirrors the Brain pattern. |
 
 ## Development
 
 ```bash
 npm install
-npm run dev        # --watch reload on Node 20+
+AGENT_API_KEY=dev-key npm run dev   # a key is required: without one every protected route is 503
+npm test
 curl -s http://localhost:3100/health | jq
 ```
 
 ## Deployment
 
-Railway, auto-deploy on push to `main`. Phase B-2 added a Railway volume mounted at `/data` (configured in the Railway dashboard — Service → Settings → Volumes) for baseline persistence; set `DATA_DIR=/data` on the service so `src/cron.js` reads/writes `${DATA_DIR}/baselines.json` across redeploys.
+Railway (project `romantic-beauty`, service `ai-security-agent`), auto-deploy on push to `main`.
+
+> **As of 2026-11-24 the volume does NOT exist.** `romantic-beauty` has no volume and `DATA_DIR` is unset, so `src/cron.js` falls back to `os.tmpdir()`; logs show `persisted 2 baseline(s) → /tmp/baselines.json` nightly (03:00 UTC). Baselines are lost on every redeploy. To fix: add a volume at `/data` and set `DATA_DIR=/data` (tracked as Brain task `task_1795567205608_q6z129`). The paragraph below describes the intended design.
+
+Phase B-2 planned a Railway volume mounted at `/data` (configured in the Railway dashboard — Service → Settings → Volumes) for baseline persistence; set `DATA_DIR=/data` on the service so `src/cron.js` reads/writes `${DATA_DIR}/baselines.json` across redeploys.
 
 ## Portfolio framing
 

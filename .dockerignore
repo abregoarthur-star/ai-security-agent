@@ -1,0 +1,13 @@
+node_modules
+.git
+.github
+.agents
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+data
+tests
+docs
+*.md

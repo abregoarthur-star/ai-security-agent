@@ -1,7 +1,8 @@
-import { audit } from '@dj_abstract/mcp-audit';
-import { readFile, readdir, writeFile, mkdtemp, rm } from 'node:fs/promises';
-import { tmpdir, homedir } from 'node:os';
-import { join, basename, isAbsolute, resolve } from 'node:path';
+import { readFile } from 'node:fs/promises';
+import { basename } from 'node:path';
+import { auditMcpServer } from './audit-mcp-server.js';
+import { badRequest } from '../lib/errors.js';
+import { MAX_TARGETS, jsonFilesInsideRoot } from '../lib/policy.js';
 
 /**
  * Sweep multiple MCP servers in parallel (bounded concurrency) and return
@@ -12,12 +13,14 @@ import { join, basename, isAbsolute, resolve } from 'node:path';
  *   { targets: [ <spec>, ... ] }
  *       where each <spec> is one of:
  *         { name?, manifestData: {...} }
- *         { name?, manifest: "/absolute/path/to/manifest.json" }
- *         { name?, stdio: "cmd ..." }
- *         { name?, url: "https://...", bearer?, headers? }
- *   { baselinesDir: "path/to/dir" }
+ *         { name?, manifest: "file inside MANIFEST_ROOT" }
+ *         { name?, stdio: "cmd ..." }            (off unless the server allows it)
+ *         { name?, url: "https://...", bearer?, headers? }   (public addresses only)
+ *       Each target goes through the same checks as audit_mcp_server; one
+ *       that is refused is reported as failed and the rest still run.
+ *   { baselinesDir: "dir inside MANIFEST_ROOT" }
  *       — reads all *.json files in the dir and treats each as inline manifestData.
- *         Supports ~ expansion and relative paths resolved against cwd.
+ *         Relative paths are taken from MANIFEST_ROOT.
  *         Files that don't look like manifests (no `tools` array) are skipped.
  *
  * Options (top-level, optional):
@@ -46,52 +49,50 @@ import { join, basename, isAbsolute, resolve } from 'node:path';
  *     reports?: { [name]: <full audit report> }   // only when fullReports=true
  *   }
  */
-export async function sweepMcpEcosystem(input = {}) {
+export async function sweepMcpEcosystem(input = {}, ctx = {}) {
+  const env = ctx.env || process.env;
   if (typeof input !== 'object' || input === null) {
-    throw new Error('sweepMcpEcosystem: input must be an object');
+    throw badRequest('sweepMcpEcosystem: input must be an object');
   }
 
   const concurrency = clampInt(input.concurrency, 1, 20, 5);
   const fullReports = !!input.fullReports;
 
-  const targets = await resolveTargets(input);
+  const targets = await resolveTargets(input, env);
   if (!targets.length) {
-    throw new Error('sweepMcpEcosystem: no targets resolved from input');
+    throw badRequest('sweepMcpEcosystem: no targets resolved from input');
+  }
+  if (targets.length > MAX_TARGETS) {
+    throw badRequest(`sweepMcpEcosystem: at most ${MAX_TARGETS} targets per call`);
   }
 
   const startedAt = new Date().toISOString();
-  const results = await runBatched(targets, concurrency, auditOne);
+  const results = await runBatched(targets, concurrency, (t) => auditOne(t, ctx));
 
   return aggregate({ startedAt, results, fullReports });
 }
 
 // ── target resolution ────────────────────────────────────────────────────────
 
-async function resolveTargets(input) {
+async function resolveTargets(input, env) {
   const { targets, baselinesDir } = input;
   const providedCount = [Array.isArray(targets) && targets.length, baselinesDir]
     .filter(Boolean).length;
   if (providedCount !== 1) {
-    throw new Error('sweepMcpEcosystem: provide exactly one of {targets[], baselinesDir}');
+    throw badRequest('sweepMcpEcosystem: provide exactly one of {targets[], baselinesDir}');
   }
 
   if (Array.isArray(targets)) {
     return targets.map((spec, i) => normalizeTarget(spec, i));
   }
 
-  // baselinesDir: load every *.json in the directory as inline manifestData
-  const dir = expandPath(baselinesDir);
-  let entries;
-  try {
-    entries = await readdir(dir);
-  } catch (err) {
-    throw new Error(`sweepMcpEcosystem: failed to read baselinesDir ${dir}: ${err.message}`);
-  }
-  const jsonFiles = entries.filter((f) => f.endsWith('.json')).sort();
+  // baselinesDir: load every *.json directly in the directory as inline
+  // manifestData. The directory and each file must really be inside MANIFEST_ROOT.
+  const jsonFiles = await jsonFilesInsideRoot(baselinesDir, env, { depth: 0 });
 
   const loaded = [];
-  for (const file of jsonFiles) {
-    const fullPath = join(dir, file);
+  for (const fullPath of jsonFiles) {
+    const file = basename(fullPath);
     try {
       const raw = await readFile(fullPath, 'utf8');
       const data = JSON.parse(raw);
@@ -106,7 +107,7 @@ async function resolveTargets(input) {
     }
   }
   if (!loaded.length) {
-    throw new Error(`sweepMcpEcosystem: no manifest-shaped JSON files found in ${dir}`);
+    throw badRequest('sweepMcpEcosystem: no manifest-shaped JSON files found in baselinesDir');
   }
   return loaded;
 }
@@ -133,18 +134,9 @@ function normalizeTarget(spec, idx) {
   return { name: derivedName, manifest, manifestData, stdio, url, bearer, headers };
 }
 
-function expandPath(p) {
-  if (!p) return p;
-  let out = p.startsWith('~')
-    ? join(homedir(), p.slice(1).replace(/^[\\/]/, ''))
-    : p;
-  if (!isAbsolute(out)) out = resolve(process.cwd(), out);
-  return out;
-}
-
 // ── per-target audit ─────────────────────────────────────────────────────────
 
-async function auditOne(target) {
+async function auditOne(target, ctx) {
   if (target._invalid) {
     return { name: target.name, ok: false, error: target._invalid };
   }
@@ -153,28 +145,13 @@ async function auditOne(target) {
   }
 
   try {
-    const report = await runAudit(target);
+    // Same entry point, and so the same restrictions, as audit_mcp_server.
+    const { manifest, manifestData, stdio, url, bearer, headers } = target;
+    const report = await auditMcpServer({ manifest, manifestData, stdio, url, bearer, headers }, ctx);
     return { name: target.name, ok: true, report };
   } catch (err) {
     return { name: target.name, ok: false, error: err?.message || String(err) };
   }
-}
-
-async function runAudit({ manifest, manifestData, stdio, url, bearer, headers }) {
-  // Inline manifest → stage to a tempfile so mcp-audit's loadManifest() can read it.
-  if (manifestData) {
-    const dir = await mkdtemp(join(tmpdir(), 'ai-sec-sweep-'));
-    const path = join(dir, 'manifest.json');
-    try {
-      await writeFile(path, JSON.stringify(manifestData));
-      return await audit({ manifest: path });
-    } finally {
-      await rm(dir, { recursive: true, force: true });
-    }
-  }
-  if (manifest) return await audit({ manifest });
-  if (stdio) return await audit({ stdio });
-  return await audit({ url, bearer, headers });
 }
 
 // ── bounded-concurrency batch runner ─────────────────────────────────────────

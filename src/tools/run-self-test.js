@@ -4,30 +4,52 @@
  * Wraps prompt-genesis@0.3.0's `selfTest()` export. Return shape mirrors
  * the frozen contract 1:1 (see project_ai_security_agent.md memory).
  *
- * Stub was removed 2026-04-20 after rounds=3 smoke test passed the other
- * terminal's validation. Real path is live. n=30 scale validation will
- * happen as a separate exercise post-swap.
+ * Each run spends real money on model calls, so the two inputs that set the
+ * size of the bill — `rounds` and `maxCostUsdPerGen` — are capped by the
+ * server (SELF_TEST_MAX_ROUNDS, SELF_TEST_MAX_COST_USD_PER_GEN). A caller may
+ * ask for less, never for more. Every run goes through the spend ledger
+ * (ctx.ledger, lib/spend.js), which enforces the daily cap and records it.
  */
 
 import { selfTest } from '@dj_abstract/prompt-genesis';
+import { badRequest } from '../lib/errors.js';
+import { assertModelAllowed, clampSelfTest } from '../lib/policy.js';
+import { defaultUrlGuard } from '../lib/url-guard.js';
 
-export async function runSelfTest(input) {
+// Target kinds that make this server call an address the caller names.
+const URL_TARGET_KINDS = new Set(['http', 'brain']);
+
+export async function runSelfTest(input, ctx = {}) {
+  const env = ctx.env || process.env;
   if (!input || typeof input !== 'object') {
-    throw new Error('runSelfTest: input must be an object');
+    throw badRequest('runSelfTest: input must be an object');
   }
   const { target, seedCorpus, rounds, generatorModel, judgeModel, maxCostUsdPerGen } = input;
 
-  if (!target) throw new Error('runSelfTest: target is required');
+  if (!target || typeof target !== 'object') throw badRequest('runSelfTest: target is required');
   if (!Array.isArray(seedCorpus) || seedCorpus.length === 0) {
-    throw new Error('runSelfTest: seedCorpus must be a non-empty array');
+    throw badRequest('runSelfTest: seedCorpus must be a non-empty array');
+  }
+  assertModelAllowed(generatorModel, 'generatorModel', env);
+  assertModelAllowed(judgeModel, 'judgeModel', env);
+  if (URL_TARGET_KINDS.has(target.kind)) {
+    if (typeof target.url !== 'string') throw badRequest(`runSelfTest: target.url is required for kind "${target.kind}"`);
+    await (ctx.guard || defaultUrlGuard()).assertPublicUrl(target.url);
   }
 
-  return await selfTest({
+  const capped = clampSelfTest({ rounds, maxCostUsdPerGen }, env);
+  if ((rounds && Number(rounds) !== capped.rounds) || (maxCostUsdPerGen && Number(maxCostUsdPerGen) !== capped.maxCostUsdPerGen)) {
+    console.log(`[run_self_test] request limits lowered to the server maxima: rounds=${capped.rounds} maxCostUsdPerGen=${capped.maxCostUsdPerGen}`);
+  }
+
+  if (!ctx.ledger) throw new Error('runSelfTest: no spend ledger — refusing to run untracked');
+  const run = {
     target,
     seedCorpus,
-    rounds:         rounds || 30,
+    rounds:         capped.rounds,
     generatorModel: generatorModel || 'claude-sonnet-4-6',
     judgeModel:     judgeModel || 'claude-haiku-4-5',
-    maxCostUsdPerGen: maxCostUsdPerGen || 1.50,
-  });
+    maxCostUsdPerGen: capped.maxCostUsdPerGen,
+  };
+  return await ctx.ledger.charge({ ...run, caller: ctx.caller }, () => (ctx.selfTest || selfTest)(run));
 }
