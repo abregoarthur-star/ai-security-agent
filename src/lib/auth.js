@@ -45,6 +45,9 @@ export function loadCapabilities(env = process.env) {
   return map;
 }
 
+/** Callers named lure-<site> are lure sensors; the site is the rest of the name. */
+export const SENSOR_PREFIX = 'lure-';
+
 const digest = (value) => crypto.createHash('sha256').update(String(value), 'utf8').digest();
 
 /** Constant-time comparison that does not reveal the length of either side. */
@@ -71,6 +74,10 @@ export function createAuth({
 
   function can(caller, capability) {
     const allowed = capabilities[caller];
+    // Sensor keys (callers named lure-<site>) live on public services; they
+    // may only post events, whether or not CALLER_CAPABILITIES names them.
+    if (caller.startsWith(SENSOR_PREFIX)) return capability === 'sensor';
+    if (capability === 'sensor') return false;
     if (!allowed) return true;
     return allowed.has('*') || allowed.has(capability);
   }

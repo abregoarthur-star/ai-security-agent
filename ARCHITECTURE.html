@@ -1025,6 +1025,18 @@ p code, li code, td code {
           <td data-label="Purpose">Consumer-ready snapshot: totals, per-server findings, high-priority findings, firewall 24h stats, freshness. Shaped for Security Agent polling.</td>
           <td data-label="Phase"><span class="phase p3">3</span></td>
         </tr>
+        <tr>
+          <td data-label="Method"><span class="method post">POST</span></td>
+          <td data-label="Route"><span class="route">/sensor/events</span></td>
+          <td data-label="Purpose">Lure-sensor intake (<code>agent-lure</code>). Only callers named <code>lure-&lt;site&gt;</code>; site from the key, kind from the lure. First agent hit per source per day &rarr; Telegram.</td>
+          <td data-label="Phase"><span class="phase p3">L</span></td>
+        </tr>
+        <tr>
+          <td data-label="Method"><span class="method get">GET</span></td>
+          <td data-label="Route"><span class="route">/sensor/events &middot; /sensor/summary</span></td>
+          <td data-label="Purpose">Latest lure events and per-site counts: by kind and lure, distinct sources, sources that took an agent lure.</td>
+          <td data-label="Phase"><span class="phase p3">L</span></td>
+        </tr>
       </tbody>
     </table>
   </div>
@@ -1362,6 +1374,12 @@ p code, li code, td code {
           <td data-label="Status"><span class="badge green">complete</span></td>
           <td data-label="Shipped"><span class="route">2026-04-19</span></td>
           <td data-label="Scope">Baseline persistence to <code>${DATA_DIR}/baselines.json</code> via Railway volume &mdash; atomic temp+rename writes, hydrate-on-boot, graceful fallback to <code>os.tmpdir()</code> in local dev</td>
+        </tr>
+        <tr>
+          <td data-label="Phase"><span class="phase p3">Lure sensors</span></td>
+          <td data-label="Status"><span class="badge green">complete</span></td>
+          <td data-label="Shipped"><span class="route">2026-11-25</span></td>
+          <td data-label="Scope">Hub for <code>agent-lure</code> sensors on fleet services: <code>/sensor/*</code> intake, 30-day event store, Telegram alerts. Lab: attack-task agents 10/10 caught (plain and hardened), benign 0/10, crawlers 0 false alarms</td>
         </tr>
         <tr>
           <td data-label="Phase"><span class="phase p3">Phase 3 follow-up</span></td>

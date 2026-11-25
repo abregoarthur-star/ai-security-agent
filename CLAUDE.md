@@ -33,7 +33,11 @@ Node.js 22 + Express (ESM). Deployed to Railway (Dockerfile, `npm ci`). Imports 
 | `POST` | `/tools/firewall_recent_events` | Fetch recent agent-firewall events from Brain. |
 | `GET` | `/ai-security/posture` | Aggregated state of tracked surfaces (Phase 2 will populate). |
 
-All `/tools/*`, `/intel/*` and `/ai-security/*` routes need `x-api-key`. Callers come from `AGENT_API_KEYS` (`name:key,name:key`) plus `AGENT_API_KEY` / `API_KEY` as caller `legacy`. **With no key configured every one of these routes answers 503, in every environment** — set a key to develop locally. Wrong or missing key → 401. Each request logs the caller name.
+| `POST` | `/sensor/events` | Lure-sensor intake ([agent-lure](https://github.com/abregoarthur-star/agent-lure)). Only callers named `lure-<site>` (capability `sensor`); body `{ events: [...] }`, ≤50 per post, 64 KB. |
+| `GET` | `/sensor/events` | Authenticated (`posture`). Latest events, `?site=&kind=&limit=` (≤500). |
+| `GET` | `/sensor/summary` | Authenticated (`posture`). Per site: totals, last 24 h, by kind and lure, distinct sources, sources that took an agent lure. |
+
+All `/tools/*`, `/intel/*`, `/sensor/*` and `/ai-security/*` routes need `x-api-key`. Callers come from `AGENT_API_KEYS` (`name:key,name:key`) plus `AGENT_API_KEY` / `API_KEY` as caller `legacy`. **With no key configured every one of these routes answers 503, in every environment** — set a key to develop locally. Wrong or missing key → 401. Each request logs the caller name.
 
 ## What a caller can make the server do
 
@@ -45,6 +49,15 @@ A valid key is not full trust (`src/lib/policy.js`, `src/lib/url-guard.js`). A r
 - **`url`** (and a self-test `target.url`) — http(s) only, public addresses only: loopback, RFC 1918, link-local (169.254.169.254 included), CGNAT, IPv6 loopback / unique-local / link-local and IPv4-mapped forms are refused. For audits the check is repeated when the connection is made and on every redirect, and the whole audit has a 30-second deadline. Requests to the configured `BRAIN_API_URL` are not subject to this.
 - **`run_self_test`** — `rounds` and `maxCostUsdPerGen` are capped by `SELF_TEST_MAX_ROUNDS` / `SELF_TEST_MAX_COST_USD_PER_GEN`; a caller may lower them, never raise them. `generatorModel` and `judgeModel` must be on `SELF_TEST_MODEL_ALLOWLIST` (400 `model_not_allowed`); the check is on the model the run will use, so the built-in defaults (`claude-sonnet-5-5`, `claude-haiku-5-5`) are held to it too. On top of that a **daily cap** (`SELF_TEST_DAILY_CAP_USD`, UTC day): a run is refused (429, `daily_cap`) when today's recorded spend plus runs in flight plus this run's maximum (2 × `maxCostUsdPerGen`) would pass it. With the default $3.00 cap that is one default-size run a day.
 - **Capabilities** — `CALLER_CAPABILITIES` (`name=cap|cap,name=*`) narrows a caller to named capabilities: the six tool names, `intel`, `posture`, `scan`, `admin`. A caller not listed may use everything.
+
+## Lure sensors (`src/lib/sensor-events.js`)
+
+Fleet services run an agent-lure sensor that reports here. A sensor's key is named `lure-<site>` in `AGENT_API_KEYS` (e.g. `lure-brain`, `lure-portfolio`); such a caller may **only** post events, whatever `CALLER_CAPABILITIES` says, and no other caller may post (`auth.js`). Sensor keys sit on public services, so this keeps a leaked one harmless.
+
+- The site is the key name minus `lure-`, never a body field; the kind (`crawl` / `instruction` / `bait`) is derived from the lure name; unknown lures are dropped, strings cut, a sensor clock more than a day off is replaced by arrival time.
+- Kept in `<data dir>/sensor-events.json`: 30 days, at most 5,000 events.
+- **Telegram** (through Brain's `/telegram/send`, `src/lib/telegram.js`, shared with the self-scan): the first `instruction` or `bait` hit per source (ip + user agent) per site per UTC day. `crawl` hits (robots Disallow, path fragments) never alert. The alert is sent in the background; the sensor gets its 202 at once.
+- Lab-measured on Claude Haiku 5.5 (2026-11-25): attack-task agents 10/10 caught even with a system-prompt defence against page instructions, benign agents 0/10, non-LLM crawlers 0 false alarms. The live false-alarm count started at deploy.
 
 ## Spend ledger (`src/lib/spend.js`)
 
@@ -101,7 +114,7 @@ curl -s http://localhost:3100/health | jq
 
 Railway (project `romantic-beauty`, service `ai-security-agent`), auto-deploy on push to `main`.
 
-> **As of 2026-11-24 the volume does NOT exist.** `romantic-beauty` has no volume and `DATA_DIR` is unset, so `src/cron.js` falls back to `os.tmpdir()`; logs show `persisted 2 baseline(s) → /tmp/baselines.json` nightly (03:00 UTC). Baselines are lost on every redeploy. To fix: add a volume at `/data` and set `DATA_DIR=/data` (tracked as Brain task `task_1795567205608_q6z129`). The paragraph below describes the intended design.
+> **Volume attached 2026-11-24:** `/data` with `DATA_DIR=/data` — baselines, the self-test spend ledger and sensor events persist across redeploys.
 
 Phase B-2 planned a Railway volume mounted at `/data` (configured in the Railway dashboard — Service → Settings → Volumes) for baseline persistence; set `DATA_DIR=/data` on the service so `src/cron.js` reads/writes `${DATA_DIR}/baselines.json` across redeploys.
 

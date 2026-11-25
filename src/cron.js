@@ -26,11 +26,9 @@ import { auditMcpServer } from './tools/audit-mcp-server.js';
 import { diffMcpServer } from './tools/diff-mcp-server.js';
 import { resolveDataDir } from './lib/data-dir.js';
 import { jsonFile } from './lib/store.js';
+import { sendTelegram, escapeHtml } from './lib/telegram.js';
 
 const FETCH_TIMEOUT_MS = 30_000;
-const TELEGRAM_TIMEOUT_MS = 15_000;
-
-const escapeHtml = (text) => String(text).replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]));
 
 function summarizeReport(name, report) {
   const findings = report.findings || [];
@@ -132,34 +130,8 @@ export function createScanner({
 
   /** Send one alert. Never throws; the outcome is returned and kept in state.alerting. */
   async function postTelegram(kind, message) {
-    const at = new Date().toISOString();
-    const key = env.BRAIN_API_KEY;
-    let outcome;
-    if (!brainBase() || !key) {
-      state.alerting.configured = false;
-      outcome = { kind, at, ok: false, skipped: 'BRAIN_API_URL / BRAIN_API_KEY not configured' };
-      log.warn(`[ai-sec-agent] alert not sent (${kind}): Brain is not configured`);
-    } else {
-      state.alerting.configured = true;
-      try {
-        const res = await fetchImpl(`${brainBase()}/telegram/send`, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json', 'x-api-key': key },
-          body: JSON.stringify({ message, from: 'AI Security Agent' }),
-          signal: AbortSignal.timeout(TELEGRAM_TIMEOUT_MS),
-        });
-        if (res.ok) {
-          outcome = { kind, at, ok: true, status: res.status };
-        } else {
-          const body = await res.text().catch(() => '');
-          outcome = { kind, at, ok: false, status: res.status, error: body.slice(0, 200) };
-          log.error(`[ai-sec-agent] telegram post rejected (${kind}): ${res.status} ${body.slice(0, 200)}`);
-        }
-      } catch (err) {
-        outcome = { kind, at, ok: false, error: err.message };
-        log.error(`[ai-sec-agent] telegram post failed (${kind}): ${err.message}`);
-      }
-    }
+    state.alerting.configured = !!(brainBase() && env.BRAIN_API_KEY);
+    const outcome = await sendTelegram({ env, fetchImpl, kind, message, log });
     state.alerting.last = outcome;
     return outcome;
   }

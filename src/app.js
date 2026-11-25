@@ -10,7 +10,8 @@ import { capabilityInventory } from './tools/capability-inventory.js';
 import { sweepMcpEcosystem } from './tools/sweep-mcp-ecosystem.js';
 import { getAiSecurityIntel } from './routes/ai-security-intel.js';
 import { getLastScan, runSelfScan, resetBaseline } from './cron.js';
-import { createAuth, loadAgentKeys, loadCapabilities } from './lib/auth.js';
+import { createAuth, loadAgentKeys, loadCapabilities, SENSOR_PREFIX } from './lib/auth.js';
+import { createSensorStore } from './lib/sensor-events.js';
 import { resolveDataDir, resolveManifestRoot } from './lib/data-dir.js';
 import { limits, stdioAllowlist } from './lib/policy.js';
 import { createSpendLedger } from './lib/spend.js';
@@ -39,6 +40,7 @@ export function createApp({
   scan = { getLastScan, runSelfScan, resetBaseline },
   intel = getAiSecurityIntel,
   ledger = createSpendLedger({ env }),
+  sensors = createSensorStore({ env }),
   log = (line) => console.log(line),
 } = {}) {
   const auth = createAuth({ keys: loadAgentKeys(env), capabilities: loadCapabilities(env), log });
@@ -88,6 +90,24 @@ export function createApp({
       console.error('[ai-sec-agent] /intel/ai-security failed:', err);
       res.status(500).json({ error: 'internal_error', message: err.message });
     }
+  });
+
+  // ─── Lure sensors (agent-lure) ───────────────────────────────
+  // Only callers named lure-<site> may post (see auth.js); the site is taken
+  // from the key name, never from the body.
+  app.post('/sensor/events', auth.gate('sensor'), express.json({ limit: '64kb' }), async (req, res) => {
+    const site = req.caller.slice(SENSOR_PREFIX.length);
+    if (!/^[a-z0-9][a-z0-9-]{0,39}$/.test(site)) return res.status(403).json({ error: 'forbidden', message: 'sensor key name must be lure-<site>' });
+    const out = await sensors.ingest(site, req.body?.events);
+    res.status(202).json(out);
+  });
+
+  app.get('/sensor/events', auth.gate('posture'), (req, res) => {
+    res.json({ events: sensors.list({ site: req.query.site, kind: req.query.kind, limit: req.query.limit }) });
+  });
+
+  app.get('/sensor/summary', auth.gate('posture'), (_req, res) => {
+    res.json(sensors.summary());
   });
 
   // ─── Aggregated posture (for dashboards) ─────────────────────

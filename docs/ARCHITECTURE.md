@@ -50,8 +50,11 @@ ai-security-agent/
 │   │   ├── run-self-test.js
 │   │   ├── capability-inventory.js     (Phase 3)
 │   │   └── sweep-mcp-ecosystem.js      (Phase 3)
-│   └── routes/
-│       └── ai-security-intel.js        # Consumer-ready snapshot for Security Agent
+│   ├── routes/
+│   │   └── ai-security-intel.js        # Consumer-ready snapshot for Security Agent
+│   └── lib/
+│       ├── sensor-events.js            # Lure-sensor event store + alerts (/sensor/*)
+│       └── telegram.js                 # One Telegram send via Brain, for the scan and the sensors
 ├── docs/
 │   └── ARCHITECTURE.md         # This file
 ├── .agents/                    # Parallel-build coordination notes (per-phase)
@@ -78,6 +81,8 @@ All `/tools/*`, `/ai-security/*`, and `/intel/*` routes are gated on `x-api-key`
 | `GET` | `/ai-security/last-scan` | Most recent scan summary (same shape as `getLastScan()`). | 1 |
 | `POST` | `/ai-security/scan/trigger` | Manual scan kickoff — runs `runSelfScan({ trigger: 'manual' })`. | 1 |
 | `GET` | `/intel/ai-security` | Consumer-ready snapshot: totals, per-server findings, high-priority findings, firewall 24h stats, freshness. Shaped for Security Agent polling. | 3 |
+| `POST` | `/sensor/events` | Lure-sensor intake ([agent-lure](https://github.com/abregoarthur-star/agent-lure)). Only callers named `lure-<site>`; site from the key, kind from the lure. First agent hit per source per day → Telegram. | L |
+| `GET` | `/sensor/events`, `/sensor/summary` | Latest lure events; per-site counts by kind and lure, distinct sources, sources that took an agent lure. | L |
 
 Request/response shapes for each tool live next to the handler in `src/tools/*.js` and in the phase notes under `.agents/`.
 
@@ -172,6 +177,7 @@ Each portfolio repo remains independently maintained and published to npm / GitH
 | **Phase B** | complete | 2026-04-20 | Daily self-scan cron (03:00 UTC + boot-run), in-memory baseline state, critical-drift Telegram alerts via Brain |
 | **Phase 3** | complete | 2026-04-22 | `capability_inventory`, `sweep_mcp_ecosystem`, `/intel/ai-security` Security Agent uplink |
 | **Phase B-2** | complete | 2026-04-19 | Baseline persistence to `${DATA_DIR}/baselines.json` via Railway volume — atomic temp+rename writes, hydrate-on-boot, graceful fallback to `os.tmpdir()` in local dev |
+| **Lure sensors** | complete | 2026-11-25 | Hub for `agent-lure` sensors: `/sensor/*` intake, 30-day store, Telegram alerts. Lab: attack-task agents 10/10 caught (plain and hardened), benign 0/10, crawlers 0 false alarms |
 | **Phase 3 follow-up** | pending | — | Full Security Agent integration: pull consumer wired into Security Agent's `src/intel.js` 5-min polling engine so `/intel/security` correlates CVE/bounty intel with AI-native posture |
 
 ## Known issues / deferred work
